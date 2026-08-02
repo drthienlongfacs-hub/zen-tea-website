@@ -6,13 +6,13 @@ const RESERVATIONS_KEY = 'AN_NHIEN_RESERVATIONS_LEDGER_V1';
 const MESSAGES_KEY = 'AN_NHIEN_MESSAGES_LEDGER_V1';
 const CONFIG_KEY = 'AN_NHIEN_SHOP_CONFIG_V1';
 
-// Default Owner Configuration
+// Default Owner Configuration — @TradaoLinhbot (Bryant/Chị Linh)
 export const defaultShopConfig = {
   ownerName: 'Chị Linh',
   ownerPhone: '0585596789',
   shopAddress: 'Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM',
-  notifyTelegramBotToken: '', // Free Telegram Bot Token (optional)
-  notifyTelegramChatId: '',   // Free Telegram Chat ID (optional)
+  notifyTelegramBotToken: '***TELEGRAM_TOKEN_REVOKED***',
+  notifyTelegramChatId: '7946238337',
   enableSoundAlert: true,
   enableAutoNotify: true
 };
@@ -206,32 +206,47 @@ export function markMessageRead(msgId) {
 
 export function sendFreeNotificationToOwner(order, shopConfig) {
   const phoneTarget = shopConfig.ownerPhone || '0585596789';
-  const orderSummaryText = `🚨 BÁO ĐƠN HÀNG MỚI (#${order.id})\n` +
-    `👤 Khách hàng: ${order.customer.fullName}\n` +
-    `📞 SĐT Khách: ${order.customer.phone}\n` +
-    `📍 Giao đến: ${order.customer.address}\n` +
-    `🍵 Số món: ${order.items.length} phần trà\n` +
-    `💰 Tổng tiền: ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(order.payment.grandTotal)}\n` +
-    `💳 Thanh toán: ${order.payment.method.toUpperCase()}\n` +
-    `📱 Chủ quán: Chị Linh (${phoneTarget})`;
+  const fmtVND = (v) => new Intl.NumberFormat('vi-VN').format(v) + 'd';
+  const fmtDate = (iso) => { const d = new Date(iso); return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' - ' + d.toLocaleDateString('vi-VN'); };
+  const payLabel = { momo: 'Vi MoMo', bank: 'MB Bank QR (0888999911)', cod: 'Tien Mat (COD)' };
+  const paidLabel = order.payment.isPaid ? 'DA THANH TOAN' : 'CHUA THANH TOAN';
 
-  console.log('--- FREE NOTIFICATION DISPATCHED TO ' + phoneTarget + ' ---');
-  console.log(orderSummaryText);
+  const itemLines = (order.items || []).map((it, i) =>
+    `  ${i + 1}. ${it.quantity}x ${it.item?.name || '?'} (${it.size?.name || ''}) - ${fmtVND(it.totalPrice)}`
+  ).join('\n');
+
+  const msg = [
+    '🚨 DON HANG MOI — AN NHIEN TRA QUAN',
+    '===========================',
+    `Don: #${order.id} | ${fmtDate(order.createdAt)}`,
+    '===========================',
+    `Khach: ${order.customer.fullName}`,
+    `SDT: ${order.customer.phone}`,
+    `Giao den: ${order.customer.address}`,
+    order.customer.notes ? `Ghi chu: ${order.customer.notes}` : null,
+    '===========================',
+    'Mon da dat:',
+    itemLines,
+    '===========================',
+    `Tong tien: ${fmtVND(order.payment.grandTotal)}`,
+    `Thanh toan: ${payLabel[order.payment.method] || order.payment.method} — ${paidLabel}`,
+    '===========================',
+    `Chu quan: ${shopConfig.ownerName || 'Chi Linh'} (${phoneTarget})`,
+    '👉 Quan ly: https://drthienlongfacs-hub.github.io/zen-tea-website/'
+  ].filter(Boolean).join('\n');
+
+  console.log('--- TELEGRAM NOTIFICATION DISPATCHED ---');
+  console.log(msg);
 
   if (shopConfig.notifyTelegramBotToken && shopConfig.notifyTelegramChatId) {
-    try {
-      fetch(`https://api.telegram.org/bot${shopConfig.notifyTelegramBotToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: shopConfig.notifyTelegramChatId,
-          text: orderSummaryText,
-          parse_mode: 'HTML'
-        })
-      }).catch(err => console.error('Telegram notification error:', err));
-    } catch (e) {
-      // ignore
-    }
+    fetch(`https://api.telegram.org/bot${shopConfig.notifyTelegramBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: shopConfig.notifyTelegramChatId,
+        text: msg
+      })
+    }).catch(err => console.error('Telegram order notification error:', err));
   }
 
   if (shopConfig.enableSoundAlert) {
@@ -241,31 +256,34 @@ export function sendFreeNotificationToOwner(order, shopConfig) {
 
 export function sendFreeReservationNotificationToOwner(reservation, shopConfig) {
   const phoneTarget = shopConfig.ownerPhone || '0585596789';
-  const summaryText = `📅 BÁO ĐẶT BÀN MỚI (#${reservation.id})\n` +
-    `👤 Khách hàng: ${reservation.name}\n` +
-    `📞 SĐT: ${reservation.phone}\n` +
-    `📆 Ngày ghé: ${reservation.date} lúc ${reservation.time}\n` +
-    `👥 Số khách: ${reservation.guests} người\n` +
-    `⛩️ Không gian: ${reservation.roomType}\n` +
-    `📱 Chủ quán: Chị Linh (${phoneTarget})`;
 
-  console.log('--- RESERVATION NOTIFICATION DISPATCHED TO ' + phoneTarget + ' ---');
-  console.log(summaryText);
+  const msg = [
+    '📅 DAT BAN MOI — AN NHIEN TRA QUAN',
+    '===========================',
+    `Ma dat ban: #${reservation.id}`,
+    '===========================',
+    `Khach: ${reservation.name}`,
+    `SDT: ${reservation.phone}`,
+    `Ngay ghe: ${reservation.date} luc ${reservation.time}`,
+    `So khach: ${reservation.guests} nguoi`,
+    `Khong gian: ${reservation.roomType}`,
+    '===========================',
+    `Chu quan: ${shopConfig.ownerName || 'Chi Linh'} (${phoneTarget})`,
+    '👉 Xac nhan ban: https://drthienlongfacs-hub.github.io/zen-tea-website/'
+  ].join('\n');
+
+  console.log('--- TELEGRAM RESERVATION NOTIFICATION ---');
+  console.log(msg);
 
   if (shopConfig.notifyTelegramBotToken && shopConfig.notifyTelegramChatId) {
-    try {
-      fetch(`https://api.telegram.org/bot${shopConfig.notifyTelegramBotToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: shopConfig.notifyTelegramChatId,
-          text: summaryText,
-          parse_mode: 'HTML'
-        })
-      }).catch(err => console.error('Telegram reservation notification error:', err));
-    } catch (e) {
-      // ignore
-    }
+    fetch(`https://api.telegram.org/bot${shopConfig.notifyTelegramBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: shopConfig.notifyTelegramChatId,
+        text: msg
+      })
+    }).catch(err => console.error('Telegram reservation notification error:', err));
   }
 
   if (shopConfig.enableSoundAlert) {
