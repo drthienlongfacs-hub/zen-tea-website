@@ -65,14 +65,17 @@ export function saveOrder(newOrderData) {
     },
     payment: {
       method: newOrderData.paymentMethod, // momo, bank, cod
-      isPaid: newOrderData.paymentMethod !== 'cod',
+      // isPaid: false until owner manually confirms receipt (bank/momo)
+      // COD: pending until delivery
+      isPaid: false,
+      paymentStatus: newOrderData.paymentMethod === 'cod' ? 'cod_pending' : 'waiting_transfer',
       grandTotal: newOrderData.totals.grandTotal,
       subtotal: newOrderData.totals.subtotal,
       discount: newOrderData.totals.discount,
       shippingFee: newOrderData.totals.shippingFee
     },
     ownerAlertPhone: shopConfig.ownerPhone || '0585596789',
-    notifiedFreeChannel: 'Telegram / Webhook Zero-Fee API'
+    notifiedFreeChannel: 'Telegram @TradaoLinhbot + SePay biến động số dư'
   };
 
   const updatedOrders = [newOrder, ...currentOrders];
@@ -101,6 +104,29 @@ export function updateOrderStatus(orderId, newStatus) {
   });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent('order_status_updated', { detail: { orderId, newStatus } }));
+  return updated;
+}
+
+// Chị Linh bấm xác nhận đã nhận tiền từ SePay/bank alert
+export function confirmPaymentReceived(orderId) {
+  const currentOrders = getOrders();
+  const updated = currentOrders.map(order => {
+    if (order.id === orderId) {
+      return {
+        ...order,
+        payment: {
+          ...order.payment,
+          isPaid: true,
+          paymentStatus: 'confirmed',
+          confirmedAt: new Date().toISOString()
+        },
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return order;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('order_payment_confirmed', { detail: { orderId } }));
   return updated;
 }
 

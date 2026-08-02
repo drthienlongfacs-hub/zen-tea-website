@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   getOrders,
   updateOrderStatus,
+  confirmPaymentReceived,
   getReservations,
   updateReservationStatus,
   getContactMessages,
@@ -95,6 +96,11 @@ export default function AdminOrderManager({ onClose }) {
 
   const handleStatusChange = (orderId, newStatus) => {
     const updated = updateOrderStatus(orderId, newStatus);
+    setOrders(updated);
+  };
+
+  const handleConfirmPayment = (orderId) => {
+    const updated = confirmPaymentReceived(orderId);
     setOrders(updated);
   };
 
@@ -414,13 +420,35 @@ export default function AdminOrderManager({ onClose }) {
                           {formatVND(order.payment?.grandTotal)}
                         </td>
                         <td className="py-4 px-4 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                            order.payment?.method === 'momo' ? 'bg-[#a50064]/30 text-pink-300 border border-[#a50064]/40' :
-                            order.payment?.method === 'bank' ? 'bg-blue-900/30 text-blue-300 border border-blue-700/40' :
-                            'bg-amber-900/30 text-amber-300 border border-amber-700/40'
-                          }`}>
-                            {order.payment?.method?.toUpperCase()}
-                          </span>
+                          <div className="space-y-1.5">
+                            <span className={`block px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              order.payment?.method === 'momo' ? 'bg-[#a50064]/30 text-pink-300 border border-[#a50064]/40' :
+                              order.payment?.method === 'bank' ? 'bg-blue-900/30 text-blue-300 border border-blue-700/40' :
+                              'bg-amber-900/30 text-amber-300 border border-amber-700/40'
+                            }`}>
+                              {order.payment?.method === 'bank' ? '🏦 MB Bank QR' :
+                               order.payment?.method === 'momo' ? '👛 MoMo' : '💵 COD'}
+                            </span>
+                            {/* Payment verification badge */}
+                            {order.payment?.isPaid ? (
+                              <span className="block px-2 py-0.5 rounded-md text-[10px] font-bold bg-green-900/40 text-green-300 border border-green-600/40">
+                                ✅ Đã Nhận Tiền
+                                {order.payment?.confirmedAt && (
+                                  <span className="block text-[9px] text-green-400/70 mt-0.5">
+                                    {new Date(order.payment.confirmedAt).toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'})}
+                                  </span>
+                                )}
+                              </span>
+                            ) : order.payment?.method === 'cod' ? (
+                              <span className="block px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-900/30 text-amber-300 border border-amber-600/40">
+                                💵 Thu Khi Giao
+                              </span>
+                            ) : (
+                              <span className="block px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-900/30 text-red-300 border border-red-600/40 animate-pulse">
+                                ⏳ Chờ Chuyển Khoản
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4 px-4 whitespace-nowrap">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
@@ -438,39 +466,51 @@ export default function AdminOrderManager({ onClose }) {
                           </span>
                         </td>
                         <td className="py-4 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {order.status === 'MOI' && (
+                          <div className="flex flex-col items-end gap-1.5">
+                            {/* Payment confirm button — shown before Chị Linh verifies SePay alert */}
+                            {!order.payment?.isPaid && order.payment?.method !== 'cod' && order.status !== 'HUY' && (
                               <button
-                                onClick={() => handleStatusChange(order.id, 'XAC_NHAN')}
-                                className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px]"
+                                onClick={() => handleConfirmPayment(order.id)}
+                                className="px-2.5 py-1 rounded-lg bg-green-700 hover:bg-green-600 text-white font-bold text-[10px] flex items-center gap-1 border border-green-500/40"
+                                title="Bấm sau khi SePay/bank báo tiền vào"
                               >
-                                Nhận Đơn
+                                ✅ Đã Nhận Tiền
                               </button>
                             )}
-                            {order.status === 'XAC_NHAN' && (
-                              <button
-                                onClick={() => handleStatusChange(order.id, 'DANG_GIAO')}
-                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px]"
-                              >
-                                Giao Trà
-                              </button>
-                            )}
-                            {order.status === 'DANG_GIAO' && (
-                              <button
-                                onClick={() => handleStatusChange(order.id, 'HOAN_THANH')}
-                                className="px-2.5 py-1 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold text-[10px]"
-                              >
-                                Hoàn Thành
-                              </button>
-                            )}
-                            {order.status !== 'HOAN_THANH' && order.status !== 'HUY' && (
-                              <button
-                                onClick={() => handleStatusChange(order.id, 'HUY')}
-                                className="px-2.5 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px]"
-                              >
-                                Hủy
-                              </button>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {order.status === 'MOI' && (
+                                <button
+                                  onClick={() => handleStatusChange(order.id, 'XAC_NHAN')}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px]"
+                                >
+                                  Nhận Đơn
+                                </button>
+                              )}
+                              {order.status === 'XAC_NHAN' && (
+                                <button
+                                  onClick={() => handleStatusChange(order.id, 'DANG_GIAO')}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px]"
+                                >
+                                  Giao Trà
+                                </button>
+                              )}
+                              {order.status === 'DANG_GIAO' && (
+                                <button
+                                  onClick={() => handleStatusChange(order.id, 'HOAN_THANH')}
+                                  className="px-2.5 py-1 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold text-[10px]"
+                                >
+                                  Hoàn Thành
+                                </button>
+                              )}
+                              {order.status !== 'HOAN_THANH' && order.status !== 'HUY' && (
+                                <button
+                                  onClick={() => handleStatusChange(order.id, 'HUY')}
+                                  className="px-2.5 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px]"
+                                >
+                                  Hủy
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
