@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-08-02T23:18:27.270851",
+  "timestamp": "2026-08-03T06:02:06.913351",
   "total": 5,
-  "passed": 5,
+  "passed": 4,
   "results": [
     {
       "lane": 1,
       "name": "Vite Production Build",
       "status": "PASS",
-      "detail": "Built successfully in ~200ms with 0 errors"
+      "detail": "Built successfully in ~696ms with 0 errors"
     },
     {
       "lane": 2,
@@ -18,14 +18,14 @@
     {
       "lane": 3,
       "name": "Telegram Bot @TradaoLinhbot",
-      "status": "PASS",
-      "detail": "Sent live message to Chat ID 7946238337 (msg_id #8)"
+      "status": "FAIL",
+      "detail": "Chưa đặt biến môi trường AN_NHIEN_TELEGRAM_BOT_TOKEN / AN_NHIEN_TELEGRAM_CHAT_ID — bỏ qua để tránh lộ token trong code"
     },
     {
       "lane": 4,
-      "name": "Backup Vault SHA-256 Integrity",
+      "name": "Local Backup Vault SHA-256 Integrity",
       "status": "PASS",
-      "detail": "Checksum match: faf25437ed20f45a..."
+      "detail": "Checksum khớp: db5a03ad495598a2... (2 đơn hàng)"
     },
     {
       "lane": 5,

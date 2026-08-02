@@ -14,7 +14,8 @@ import {
   checkSePayAutoVerify,
   exportVaultData,
   importVaultData,
-  selfHealFromIndexedDB
+  selfHealFromIndexedDB,
+  lockAdminSession
 } from '../utils/orderService';
 
 import {
@@ -240,9 +241,9 @@ export default function AdminOrderManager({ onClose }) {
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => {
-              const res = exportVaultData();
-              alert(`✅ ĐÃ TẢI BẢN SAO LƯU DỰ PHÒNG!\nTệp: ${res.fileName}\nĐã lưu an toàn trên máy và tạo bản phục hồi tự động.`);
+            onClick={async () => {
+              const res = await exportVaultData();
+              alert(`✅ ĐÃ TẢI BẢN SAO LƯU DỰ PHÒNG!\nTệp: ${res.fileName}\nĐã lưu an toàn trên máy (có mã kiểm tra SHA-256) và tạo bản phục hồi tự động.`);
             }}
             className="px-3.5 py-2 rounded-xl bg-blue-900/60 hover:bg-blue-800 text-xs font-semibold text-blue-200 transition-colors flex items-center gap-1.5 border border-blue-700/60"
             title="Lưu bản sao lưu đầy đủ (.json) về máy mac"
@@ -262,13 +263,17 @@ export default function AdminOrderManager({ onClose }) {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (evt) => {
-                  const res = importVaultData(evt.target.result, 'merge');
+                reader.onload = async (evt) => {
+                  const res = await importVaultData(evt.target.result, 'merge');
                   if (res.success) {
                     setOrders(getOrders());
                     setReservations(getReservations());
                     setMessages(getContactMessages());
-                    alert('✅ PHỤC HỒI DỮ LIỆU THÀNH CÔNG!\nToàn bộ đơn hàng, lịch đặt bàn và cấu hình đã được khôi phục.');
+                    if (res.checksumWarning) {
+                      alert(`⚠️ ${res.checksumWarning}\nDữ liệu vẫn đã được khôi phục, nhưng bạn nên kiểm tra lại nguồn gốc file này.`);
+                    } else {
+                      alert('✅ PHỤC HỒI DỮ LIỆU THÀNH CÔNG!\nToàn bộ đơn hàng, lịch đặt bàn và cấu hình đã được khôi phục. Mã kiểm tra khớp — file không bị sửa đổi.');
+                    }
                   } else {
                     alert(`❌ KHÔI PHỤC THẤT BẠI: ${res.message}`);
                   }
@@ -293,10 +298,10 @@ export default function AdminOrderManager({ onClose }) {
             <span>Xuất CSV</span>
           </button>
           <button
-            onClick={onClose}
+            onClick={() => { lockAdminSession(); onClose(); }}
             className="px-3.5 py-2 rounded-xl bg-red-950/60 hover:bg-red-900 text-xs font-semibold text-red-200 transition-colors border border-red-800/60"
           >
-            Thoát POS
+            Thoát & Khoá POS
           </button>
         </div>
       </div>

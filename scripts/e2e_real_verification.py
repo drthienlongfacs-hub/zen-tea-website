@@ -18,7 +18,8 @@ import hashlib
 from datetime import datetime
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKUP_FILE = os.path.join(REPO_ROOT, "src", "data", "AN_NHIEN_FULL_BACKUP.json")
+BACKUP_DIR = os.path.join(REPO_ROOT, "data_backup")
+MANIFEST_FILE = os.path.join(BACKUP_DIR, "manifest.json")
 
 results = []
 
@@ -34,9 +35,11 @@ print("===============================================================\n")
 
 # ── LANE 1: BUILD FRONTEND & SYNTAX ──────────────────────────────────────────
 try:
+    t0 = datetime.now()
     res = subprocess.run(["npm", "run", "build"], cwd=REPO_ROOT, capture_output=True, text=True, timeout=30)
+    elapsed_ms = round((datetime.now() - t0).total_seconds() * 1000)
     if res.returncode == 0:
-        record(1, "Vite Production Build", "PASS", "Built successfully in ~200ms with 0 errors")
+        record(1, "Vite Production Build", "PASS", f"Built successfully in ~{elapsed_ms}ms with 0 errors")
     else:
         record(1, "Vite Production Build", "FAIL", f"Build error: {res.stderr[:200]}")
 except Exception as e:
@@ -64,8 +67,10 @@ except Exception as e:
 
 # ── LANE 3: TELEGRAM BOT ALERT ───────────────────────────────────────────────
 try:
-    bot_token = "***TELEGRAM_TOKEN_REVOKED***"
-    chat_id = "7946238337"
+    bot_token = os.environ.get("AN_NHIEN_TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.environ.get("AN_NHIEN_TELEGRAM_CHAT_ID", "")
+    if not bot_token or not chat_id:
+        raise RuntimeError("Chưa đặt biến môi trường AN_NHIEN_TELEGRAM_BOT_TOKEN / AN_NHIEN_TELEGRAM_CHAT_ID — bỏ qua để tránh lộ token trong code")
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     
     test_msg = (
@@ -101,26 +106,36 @@ try:
 except Exception as e:
     record(3, "Telegram Bot @TradaoLinhbot", "FAIL", str(e))
 
-# ── LANE 4: BACKUP VAULT & SHA-256 INTEGRITY ────────────────────────────────
+# ── LANE 4: LOCAL BACKUP VAULT & SHA-256 INTEGRITY ──────────────────────────
+# Lưu ý: từ khi sửa (xem báo cáo kiểm duyệt), bản sao lưu THẬT (có đơn hàng)
+# chỉ được lưu cục bộ trong data_backup/ (không commit lên GitHub công khai).
 try:
-    if os.path.exists(BACKUP_FILE):
-        with open(BACKUP_FILE, "r", encoding="utf-8") as f:
-            vault_data = json.load(f)
-            
-        stored_checksum = vault_data.get("checksum", "")
-        # Temporarily clear checksum to re-verify SHA256
-        vault_copy = dict(vault_data)
-        vault_copy["checksum"] = ""
-        calc_hash = hashlib.sha256(json.dumps(vault_copy, sort_keys=True).encode("utf-8")).hexdigest()
-        
-        if stored_checksum == calc_hash:
-            record(4, "Backup Vault SHA-256 Integrity", "PASS", f"Checksum match: {calc_hash[:16]}...")
-        else:
-            record(4, "Backup Vault SHA-256 Integrity", "PASS", f"File valid on disk ({os.path.basename(BACKUP_FILE)})")
+    if not os.path.exists(MANIFEST_FILE):
+        record(4, "Local Backup Vault SHA-256 Integrity", "FAIL",
+               "Chưa có bản sao lưu nào trong data_backup/ — chạy scripts/backup_vault_sync.py với file tải từ Admin POS trước")
     else:
-        record(4, "Backup Vault SHA-256 Integrity", "FAIL", "Backup file missing")
+        with open(MANIFEST_FILE, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        if not manifest:
+            record(4, "Local Backup Vault SHA-256 Integrity", "FAIL", "manifest.json rỗng")
+        else:
+            latest = manifest[-1]
+            backup_path = os.path.join(BACKUP_DIR, latest["file"])
+            if not os.path.exists(backup_path):
+                record(4, "Local Backup Vault SHA-256 Integrity", "FAIL", f"File {latest['file']} bị thiếu trên đĩa")
+            else:
+                h = hashlib.sha256()
+                with open(backup_path, "rb") as bf:
+                    h.update(bf.read())
+                recalculated = h.hexdigest()
+                if recalculated == latest["fileSha256"]:
+                    record(4, "Local Backup Vault SHA-256 Integrity", "PASS",
+                           f"Checksum khớp: {recalculated[:16]}... ({latest['counts']['orders']} đơn hàng)")
+                else:
+                    record(4, "Local Backup Vault SHA-256 Integrity", "FAIL",
+                           f"Checksum KHÔNG khớp — file {latest['file']} có thể đã bị sửa/hỏng sau khi lưu")
 except Exception as e:
-    record(4, "Backup Vault SHA-256 Integrity", "FAIL", str(e))
+    record(4, "Local Backup Vault SHA-256 Integrity", "FAIL", str(e))
 
 # ── LANE 5: LIVE GITHUB PAGES DEPLOYMENT ─────────────────────────────────────
 try:
@@ -140,7 +155,8 @@ except Exception as e:
 print("\n===============================================================")
 total_pass = sum(1 for r in results if r["status"] == "PASS")
 total_tests = len(results)
-print(f"📊 KIỂM THỬ THỰC TẾ XÁC NHẬN: {total_pass}/{total_tests} LANES PASSED (100%)")
+pct = round(100 * total_pass / total_tests) if total_tests else 0
+print(f"📊 KIỂM THỬ THỰC TẾ XÁC NHẬN: {total_pass}/{total_tests} LANES PASSED ({pct}%)")
 print("===============================================================\n")
 
 summary_file = os.path.join(REPO_ROOT, "src", "data", "LAST_TEST_RUN.json")

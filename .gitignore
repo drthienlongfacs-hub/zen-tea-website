@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Bản sao lưu dữ liệu thật (đơn hàng/khách hàng) — CHỈ lưu trên máy, không commit lên GitHub (repo public)
+data_backup/
+src/data/AN_NHIEN_FULL_BACKUP.json

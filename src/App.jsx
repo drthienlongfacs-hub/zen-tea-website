@@ -11,6 +11,7 @@ import ZenSoundscapeModal from './components/ZenSoundscapeModal';
 import BlogArticleModal from './components/BlogArticleModal';
 import PolicyModal from './components/PolicyModal';
 import AdminOrderManager from './components/AdminOrderManager';
+import AdminAuthGate from './components/AdminAuthGate';
 import { saveContactMessage } from './utils/orderService';
 
 import {
@@ -266,7 +267,11 @@ export default function App() {
   const cartCount = cartItems.reduce((acc, i) => acc + i.quantity, 0);
 
   if (isAdminOpen) {
-    return <AdminOrderManager onClose={() => setIsAdminOpen(false)} />;
+    return (
+      <AdminAuthGate onCancel={() => setIsAdminOpen(false)}>
+        <AdminOrderManager onClose={() => setIsAdminOpen(false)} />
+      </AdminAuthGate>
+    );
   }
 
   return (

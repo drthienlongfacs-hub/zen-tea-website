@@ -11,8 +11,8 @@ export const defaultShopConfig = {
   ownerName: 'Chị Linh',
   ownerPhone: '0585596789',
   shopAddress: 'Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM',
-  notifyTelegramBotToken: '***TELEGRAM_TOKEN_REVOKED***',
-  notifyTelegramChatId: '7946238337',
+  notifyTelegramBotToken: '', // Dán token bot Telegram của bạn trong mục Cài Đặt (Admin POS) — không commit token vào code
+  notifyTelegramChatId: '',
   sepayApiToken: '', // SePay API Key (optional for live auto-verify)
   enableSoundAlert: true,
   enableAutoNotify: true
@@ -33,6 +33,47 @@ export function saveShopConfig(config) {
   } catch (e) {
     console.error('Error saving shop config:', e);
   }
+}
+
+/* ────────────────────────────────────────────────────
+   ADMIN POS ACCESS PASSWORD (chống người lạ vào xem đơn hàng)
+   Lưu ý: đây là site tĩnh không có máy chủ, mật khẩu chỉ ngăn
+   người xem thường — không thay thế được hệ thống đăng nhập thật.
+──────────────────────────────────────────────────── */
+const ADMIN_AUTH_KEY = 'AN_NHIEN_ADMIN_AUTH_V1';
+const ADMIN_SESSION_KEY = 'AN_NHIEN_ADMIN_UNLOCKED_V1';
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function hasAdminPassword() {
+  return !!localStorage.getItem(ADMIN_AUTH_KEY);
+}
+
+export async function setAdminPassword(newPassword) {
+  const hash = await sha256Hex(newPassword);
+  localStorage.setItem(ADMIN_AUTH_KEY, hash);
+}
+
+export async function verifyAdminPassword(password) {
+  const stored = localStorage.getItem(ADMIN_AUTH_KEY);
+  if (!stored) return false;
+  const hash = await sha256Hex(password);
+  return hash === stored;
+}
+
+export function isAdminSessionUnlocked() {
+  return sessionStorage.getItem(ADMIN_SESSION_KEY) === '1';
+}
+
+export function unlockAdminSession() {
+  sessionStorage.setItem(ADMIN_SESSION_KEY, '1');
+}
+
+export function lockAdminSession() {
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
 }
 
 /* ────────────────────────────────────────────────────
@@ -507,19 +548,17 @@ function getInitialMockMessages() {
    DISASTER RECOVERY & MULTI-TIER BACKUP VAULT ENGINE
 ──────────────────────────────────────────────────── */
 
-// 1. Export Full Database Snapshot (.json)
-export function exportVaultData() {
+// 1. Export Full Database Snapshot (.json) — kèm mã kiểm tra SHA-256 thật
+export async function exportVaultData() {
   const orders = getOrders();
   const reservations = getReservations();
   const messages = getContactMessages();
   const shopConfig = getShopConfig();
 
-  const payload = {
+  const basePayload = {
     schemaVersion: '2.0-BVBD-PROTECTED',
     exportedAt: new Date().toISOString(),
     storeName: 'An Nhiên Trà Quán',
-    storeAddress: 'Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM',
-    ownerPhone: '0585596789',
     stats: {
       totalOrders: orders.length,
       totalReservations: reservations.length,
@@ -532,6 +571,10 @@ export function exportVaultData() {
       shopConfig
     }
   };
+
+  // Mã kiểm tra toàn vẹn: nếu file bị sửa/hỏng sau khi tải về, khi khôi phục sẽ phát hiện được
+  const checksum = await sha256Hex(JSON.stringify(basePayload));
+  const payload = { ...basePayload, checksum };
 
   const jsonStr = JSON.stringify(payload, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -556,13 +599,22 @@ export function exportVaultData() {
 }
 
 // 2. Import & Restore Full Database from .json File
-export function importVaultData(jsonStr, mode = 'merge') {
+export async function importVaultData(jsonStr, mode = 'merge') {
   try {
     const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
     const data = parsed.data || parsed;
 
     if (!data.orders && !data.reservations && !data.messages) {
       throw new Error('File sao lưu không đúng định dạng An Nhiên Trà Quán!');
+    }
+
+    let checksumWarning = null;
+    if (parsed.checksum) {
+      const { checksum, ...rest } = parsed;
+      const recalculated = await sha256Hex(JSON.stringify(rest));
+      if (recalculated !== checksum) {
+        checksumWarning = 'Cảnh báo: mã kiểm tra (checksum) không khớp — file có thể đã bị sửa hoặc hỏng sau khi tải về.';
+      }
     }
 
     if (mode === 'overwrite') {
@@ -608,7 +660,11 @@ export function importVaultData(jsonStr, mode = 'merge') {
 
     // Notify UI tabs
     window.dispatchEvent(new CustomEvent('vault_data_restored', { detail: { mode } }));
-    return { success: true, message: 'Khôi phục dữ liệu thành công!' };
+    return {
+      success: true,
+      message: checksumWarning || 'Khôi phục dữ liệu thành công! (Mã kiểm tra khớp — file không bị sửa đổi)',
+      checksumWarning
+    };
   } catch (e) {
     console.error('Import Vault Error:', e);
     return { success: false, message: e.message || 'Lỗi đọc file sao lưu' };
@@ -650,8 +706,9 @@ export function selfHealFromIndexedDB(callback) {
       const getReq = store.get('latest_vault');
       getReq.onsuccess = () => {
         if (getReq.result && getReq.result.payload) {
-          importVaultData(getReq.result.payload, 'merge');
-          if (callback) callback({ success: true, timestamp: getReq.result.updatedAt });
+          importVaultData(getReq.result.payload, 'merge').then(() => {
+            if (callback) callback({ success: true, timestamp: getReq.result.updatedAt });
+          });
         } else {
           if (callback) callback({ success: false, reason: 'Chưa có bản lưu IndexedDB' });
         }
