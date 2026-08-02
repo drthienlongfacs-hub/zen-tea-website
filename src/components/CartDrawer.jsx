@@ -50,6 +50,8 @@ export default function CartDrawer({
     }
   }
 
+  const grandTotal = Math.max(0, subtotal - discount + shippingFee);
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-[#f7f4ef] border-l border-[#7c674e]/30 w-full max-w-md h-full flex flex-col justify-between shadow-2xl p-6 relative">
