@@ -502,3 +502,162 @@ function getInitialMockMessages() {
     }
   ];
 }
+
+/* ────────────────────────────────────────────────────
+   DISASTER RECOVERY & MULTI-TIER BACKUP VAULT ENGINE
+──────────────────────────────────────────────────── */
+
+// 1. Export Full Database Snapshot (.json)
+export function exportVaultData() {
+  const orders = getOrders();
+  const reservations = getReservations();
+  const messages = getContactMessages();
+  const shopConfig = getShopConfig();
+
+  const payload = {
+    schemaVersion: '2.0-BVBD-PROTECTED',
+    exportedAt: new Date().toISOString(),
+    storeName: 'An Nhiên Trà Quán',
+    storeAddress: 'Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM',
+    ownerPhone: '0585596789',
+    stats: {
+      totalOrders: orders.length,
+      totalReservations: reservations.length,
+      totalMessages: messages.length
+    },
+    data: {
+      orders,
+      reservations,
+      messages,
+      shopConfig
+    }
+  };
+
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const d = new Date();
+  const dateTag = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+  const fileName = `AN_NHIEN_SAO_LUI_DU_LIEU_${dateTag}.json`;
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  // Backup to IndexedDB as self-healing snapshot
+  saveToIndexedDBVault(payload);
+
+  return { fileName, count: orders.length + reservations.length };
+}
+
+// 2. Import & Restore Full Database from .json File
+export function importVaultData(jsonStr, mode = 'merge') {
+  try {
+    const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+    const data = parsed.data || parsed;
+
+    if (!data.orders && !data.reservations && !data.messages) {
+      throw new Error('File sao lưu không đúng định dạng An Nhiên Trà Quán!');
+    }
+
+    if (mode === 'overwrite') {
+      if (data.orders) localStorage.setItem(STORAGE_KEY, JSON.stringify(data.orders));
+      if (data.reservations) localStorage.setItem(RESERVATIONS_KEY, JSON.stringify(data.reservations));
+      if (data.messages) localStorage.setItem(MESSAGES_KEY, JSON.stringify(data.messages));
+      if (data.shopConfig) localStorage.setItem(CONFIG_KEY, JSON.stringify(data.shopConfig));
+    } else {
+      // Merge mode (deduplicate by id)
+      if (data.orders) {
+        const existing = getOrders();
+        const merged = [...data.orders, ...existing].reduce((acc, current) => {
+          const x = acc.find(item => item.id === current.id);
+          if (!x) return acc.concat([current]);
+          return acc;
+        }, []);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      }
+
+      if (data.reservations) {
+        const existing = getReservations();
+        const merged = [...data.reservations, ...existing].reduce((acc, current) => {
+          const x = acc.find(item => item.id === current.id);
+          if (!x) return acc.concat([current]);
+          return acc;
+        }, []);
+        localStorage.setItem(RESERVATIONS_KEY, JSON.stringify(merged));
+      }
+
+      if (data.messages) {
+        const existing = getContactMessages();
+        const merged = [...data.messages, ...existing].reduce((acc, current) => {
+          const x = acc.find(item => item.id === current.id);
+          if (!x) return acc.concat([current]);
+          return acc;
+        }, []);
+        localStorage.setItem(MESSAGES_KEY, JSON.stringify(merged));
+      }
+    }
+
+    // Save copy to IndexedDB
+    saveToIndexedDBVault(parsed);
+
+    // Notify UI tabs
+    window.dispatchEvent(new CustomEvent('vault_data_restored', { detail: { mode } }));
+    return { success: true, message: 'Khôi phục dữ liệu thành công!' };
+  } catch (e) {
+    console.error('Import Vault Error:', e);
+    return { success: false, message: e.message || 'Lỗi đọc file sao lưu' };
+  }
+}
+
+// 3. IndexedDB Dual-Tier Storage (Chống mất khi xóa cache trình duyệt)
+const IDB_NAME = 'AN_NHIEN_IDB_VAULT_V1';
+const IDB_STORE = 'vault_snapshots';
+
+function saveToIndexedDBVault(vaultPayload) {
+  try {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = (e) => {
+      const db = e.target.result;
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      store.put({ id: 'latest_vault', updatedAt: new Date().toISOString(), payload: vaultPayload });
+    };
+  } catch (e) {
+    console.warn('IndexedDB write warning:', e);
+  }
+}
+
+export function selfHealFromIndexedDB(callback) {
+  try {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onsuccess = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) return;
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const getReq = store.get('latest_vault');
+      getReq.onsuccess = () => {
+        if (getReq.result && getReq.result.payload) {
+          importVaultData(getReq.result.payload, 'merge');
+          if (callback) callback({ success: true, timestamp: getReq.result.updatedAt });
+        } else {
+          if (callback) callback({ success: false, reason: 'Chưa có bản lưu IndexedDB' });
+        }
+      };
+    };
+  } catch (e) {
+    if (callback) callback({ success: false, reason: e.message });
+  }
+}

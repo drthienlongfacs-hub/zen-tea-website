@@ -11,7 +11,10 @@ import {
   saveShopConfig,
   sendFreeNotificationToOwner,
   playNewOrderBellSound,
-  checkSePayAutoVerify
+  checkSePayAutoVerify,
+  exportVaultData,
+  importVaultData,
+  selfHealFromIndexedDB
 } from '../utils/orderService';
 
 import {
@@ -80,17 +83,26 @@ export default function AdminOrderManager({ onClose }) {
 
     window.addEventListener('new_order_placed', handleUpdate);
     window.addEventListener('order_status_updated', handleUpdate);
+    window.addEventListener('order_payment_confirmed', handleUpdate);
     window.addEventListener('new_reservation_placed', handleUpdate);
     window.addEventListener('reservation_status_updated', handleUpdate);
     window.addEventListener('new_contact_message', handleUpdate);
+    window.addEventListener('vault_data_restored', handleUpdate);
     window.addEventListener('storage', handleStorageChange);
+
+    // Auto Self-Heal from IndexedDB if LocalStorage was cleared
+    selfHealFromIndexedDB((res) => {
+      if (res && res.success) loadData();
+    });
 
     return () => {
       window.removeEventListener('new_order_placed', handleUpdate);
       window.removeEventListener('order_status_updated', handleUpdate);
+      window.removeEventListener('order_payment_confirmed', handleUpdate);
       window.removeEventListener('new_reservation_placed', handleUpdate);
       window.removeEventListener('reservation_status_updated', handleUpdate);
       window.removeEventListener('new_contact_message', handleUpdate);
+      window.removeEventListener('vault_data_restored', handleUpdate);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
@@ -228,6 +240,45 @@ export default function AdminOrderManager({ onClose }) {
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={() => {
+              const res = exportVaultData();
+              alert(`✅ ĐÃ TẢI BẢN SAO LƯU DỰ PHÒNG!\nTệp: ${res.fileName}\nĐã lưu an toàn trên máy và tạo bản phục hồi tự động.`);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-blue-900/60 hover:bg-blue-800 text-xs font-semibold text-blue-200 transition-colors flex items-center gap-1.5 border border-blue-700/60"
+            title="Lưu bản sao lưu đầy đủ (.json) về máy mac"
+          >
+            <Download className="w-4 h-4 text-blue-300" />
+            <span>📥 Sao Lưu Dữ Liệu</span>
+          </button>
+
+          <label className="px-3.5 py-2 rounded-xl bg-amber-900/60 hover:bg-amber-800 text-xs font-semibold text-amber-200 transition-colors flex items-center gap-1.5 border border-amber-700/60 cursor-pointer">
+            <RefreshCw className="w-4 h-4 text-amber-300" />
+            <span>📤 Khôi Phục Dữ Liệu</span>
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                  const res = importVaultData(evt.target.result, 'merge');
+                  if (res.success) {
+                    setOrders(getOrders());
+                    setReservations(getReservations());
+                    setMessages(getContactMessages());
+                    alert('✅ PHỤC HỒI DỮ LIỆU THÀNH CÔNG!\nToàn bộ đơn hàng, lịch đặt bàn và cấu hình đã được khôi phục.');
+                  } else {
+                    alert(`❌ KHÔI PHỤC THẤT BẠI: ${res.message}`);
+                  }
+                };
+                reader.readAsText(file);
+              }}
+            />
+          </label>
+
+          <button
             onClick={() => setIsConfigOpen(true)}
             className="px-3.5 py-2 rounded-xl bg-[#3d633b]/40 hover:bg-[#3d633b] text-xs font-semibold text-white transition-colors flex items-center gap-1.5 border border-[#3d633b]/60"
           >
@@ -239,7 +290,7 @@ export default function AdminOrderManager({ onClose }) {
             className="px-3.5 py-2 rounded-xl bg-[#7c674e]/40 hover:bg-[#7c674e] text-xs font-semibold text-white transition-colors flex items-center gap-1.5 border border-[#7c674e]/60"
           >
             <Download className="w-4 h-4 text-[#e2ebe0]" />
-            <span>Xuất Báo Cáo CSV</span>
+            <span>Xuất CSV</span>
           </button>
           <button
             onClick={onClose}
