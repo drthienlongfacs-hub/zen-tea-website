@@ -1,78 +1,118 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getOrders, 
-  updateOrderStatus, 
-  getShopConfig, 
-  saveShopConfig, 
+import {
+  getOrders,
+  updateOrderStatus,
+  getReservations,
+  updateReservationStatus,
+  getContactMessages,
+  markMessageRead,
+  getShopConfig,
+  saveShopConfig,
   sendFreeNotificationToOwner,
-  playNewOrderBellSound 
+  playNewOrderBellSound
 } from '../utils/orderService';
 
-import { 
-  ShoppingBag, 
-  DollarSign, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  Search, 
-  Filter, 
-  Bell, 
-  PhoneCall, 
-  ShieldCheck, 
-  Printer, 
-  Download, 
-  Settings, 
-  RefreshCw, 
-  Volume2, 
+import {
+  ShoppingBag,
+  DollarSign,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Search,
+  Filter,
+  Bell,
+  PhoneCall,
+  ShieldCheck,
+  Printer,
+  Download,
+  Settings,
+  RefreshCw,
+  Volume2,
   AlertCircle,
   Truck,
   Coffee,
   Check,
-  X
+  X,
+  Calendar,
+  MessageSquare,
+  UserCheck,
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
 
 export default function AdminOrderManager({ onClose }) {
+  const [activeAdminTab, setActiveAdminTab] = useState('orders'); // 'orders' | 'reservations' | 'messages'
   const [orders, setOrders] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [shopConfig, setShopConfigState] = useState(getShopConfig());
+
+  // Filter & Search State
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
 
-  // Load orders on mount & listen to real-time order events
+  const loadData = () => {
+    setOrders(getOrders());
+    setReservations(getReservations());
+    setMessages(getContactMessages());
+    setShopConfigState(getShopConfig());
+  };
+
+  // Real-time Event Listener & Multi-tab Sync via 'storage'
   useEffect(() => {
-    loadLatestOrders();
+    loadData();
 
-    const handleNewOrder = (e) => {
-      loadLatestOrders();
-    };
-    const handleStatusUpdate = (e) => {
-      loadLatestOrders();
+    const handleUpdate = () => loadData();
+    const handleStorageChange = (e) => {
+      if (
+        e.key === 'AN_NHIEN_ORDERS_LEDGER_V1' ||
+        e.key === 'AN_NHIEN_RESERVATIONS_LEDGER_V1' ||
+        e.key === 'AN_NHIEN_MESSAGES_LEDGER_V1' ||
+        e.key === 'AN_NHIEN_SHOP_CONFIG_V1'
+      ) {
+        loadData();
+      }
     };
 
-    window.addEventListener('new_order_placed', handleNewOrder);
-    window.addEventListener('order_status_updated', handleStatusUpdate);
+    window.addEventListener('new_order_placed', handleUpdate);
+    window.addEventListener('order_status_updated', handleUpdate);
+    window.addEventListener('new_reservation_placed', handleUpdate);
+    window.addEventListener('reservation_status_updated', handleUpdate);
+    window.addEventListener('new_contact_message', handleUpdate);
+    window.addEventListener('storage', handleStorageChange);
 
     return () => {
-      window.removeEventListener('new_order_placed', handleNewOrder);
-      window.removeEventListener('order_status_updated', handleStatusUpdate);
+      window.removeEventListener('new_order_placed', handleUpdate);
+      window.removeEventListener('order_status_updated', handleUpdate);
+      window.removeEventListener('new_reservation_placed', handleUpdate);
+      window.removeEventListener('reservation_status_updated', handleUpdate);
+      window.removeEventListener('new_contact_message', handleUpdate);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
-
-  const loadLatestOrders = () => {
-    setOrders(getOrders());
-  };
 
   const handleStatusChange = (orderId, newStatus) => {
     const updated = updateOrderStatus(orderId, newStatus);
     setOrders(updated);
   };
 
+  const handleResStatusChange = (resId, newStatus) => {
+    const updated = updateReservationStatus(resId, newStatus);
+    setReservations(updated);
+  };
+
+  const handleMarkMsgRead = (msgId) => {
+    const updated = markMessageRead(msgId);
+    setMessages(updated);
+  };
+
   const handleSaveConfig = (e) => {
     e.preventDefault();
     saveShopConfig(shopConfig);
     setIsConfigOpen(false);
-    alert('Đã lưu cấu hình báo đơn tự động thành công!');
+    alert('Đã lưu cấu hình shop & báo đơn tự động thành công!');
   };
 
   const testFreeNotification = () => {
@@ -80,7 +120,7 @@ export default function AdminOrderManager({ onClose }) {
     const testMockOrder = {
       id: 'TEST9999',
       items: [{ item: { name: 'Matcha Test Notification' }, quantity: 1, totalPrice: 68000 }],
-      customer: { fullName: 'Chủ Quán Test', phone: shopConfig.ownerPhone || '0585596789', address: 'Quán An Nhiên' },
+      customer: { fullName: 'Chủ Quán Test (Chị Linh)', phone: shopConfig.ownerPhone || '0585596789', address: 'Valeo Đầm Sen, Tân Phú' },
       payment: { method: 'momo', grandTotal: 68000 }
     };
     sendFreeNotificationToOwner(testMockOrder, shopConfig);
@@ -100,11 +140,11 @@ export default function AdminOrderManager({ onClose }) {
     }
   };
 
-  // Filtered orders list
+  // Filtered orders
   const filteredOrders = orders.filter(order => {
     const matchesFilter = activeFilter === 'ALL' || order.status === activeFilter;
     const q = searchQuery.toLowerCase();
-    const matchesSearch = 
+    const matchesSearch =
       order.id.toLowerCase().includes(q) ||
       order.customer.fullName.toLowerCase().includes(q) ||
       order.customer.phone.includes(q) ||
@@ -112,7 +152,7 @@ export default function AdminOrderManager({ onClose }) {
     return matchesFilter && matchesSearch;
   });
 
-  // Calculate KPI metrics
+  // KPI Metrics
   const totalRevenue = orders
     .filter(o => o.status !== 'HUY')
     .reduce((sum, o) => sum + (o.payment?.grandTotal || 0), 0);
@@ -121,11 +161,12 @@ export default function AdminOrderManager({ onClose }) {
   const preparingCount = orders.filter(o => o.status === 'XAC_NHAN').length;
   const shippingCount = orders.filter(o => o.status === 'DANG_GIAO').length;
   const completedCount = orders.filter(o => o.status === 'HOAN_THANH').length;
+  const unreadMsgCount = messages.filter(m => !m.isRead).length;
 
   const exportCSV = () => {
-    const BOM = '\uFEFF'; // UTF-8 BOM for Excel to correctly display Vietnamese
+    const BOM = '\uFEFF';
     const headers = 'Mã Đơn,Ngày Đặt,Giờ Đặt,Khách Hàng,Số ĐT,Địa Chỉ Giao,Số Món,Tổng Tiền (VNĐ),Thanh Toán,Trạng Thái\n';
-    const safeStr = (s) => `"${String(s || '').replace(/"/g, '\'\'')}"`;  // Escape double-quotes
+    const safeStr = (s) => `"${String(s || '').replace(/"/g, '\'\'')}"`;
     const rows = orders.map(o => {
       const d = new Date(o.createdAt);
       const dateStr = d.toLocaleDateString('vi-VN');
@@ -151,13 +192,13 @@ export default function AdminOrderManager({ onClose }) {
     a.href = url;
     a.download = `AN_NHIEN_ORDERS_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(url); // Clean up memory leak
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="min-h-screen bg-[#1f2721] text-[#f7f4ef] font-sans p-4 md:p-8 animate-fadeIn">
-      
-      {/* Top Header Bar */}
+
+      {/* Top Bar */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-[#3d633b]/40">
         <div>
           <div className="flex items-center gap-3">
@@ -166,405 +207,469 @@ export default function AdminOrderManager({ onClose }) {
             </div>
             <div>
               <h1 className="font-display text-2xl font-bold text-white flex items-center gap-2">
-                Hệ Thống Quản Lý Đơn Hàng (Shop Owner POS)
+                Hệ Thống Quản Lý An Nhiên Trà Quán
               </h1>
-              <p className="text-xs text-[#8fb388]">
-                Bảng điều khiển dành riêng cho chủ quán · An Nhiên Trà Quán
+              <p className="text-xs text-[#8fb388] mt-0.5 flex items-center gap-2">
+                <span>Chủ quán: <strong>Chị Linh</strong> ({shopConfig.ownerPhone || '0585596789'})</span>
+                <span>·</span>
+                <span>Chung cư Valeo Đầm Sen, Q. Tân Phú, TP.HCM</span>
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setIsConfigOpen(true)}
-            className="flex-1 md:flex-initial px-4 py-2 rounded-xl bg-[#2e3b31] border border-[#3d633b]/40 text-xs font-semibold hover:bg-[#3d633b] text-white transition-colors flex items-center justify-center gap-2"
+            className="px-3.5 py-2 rounded-xl bg-[#3d633b]/40 hover:bg-[#3d633b] text-xs font-semibold text-white transition-colors flex items-center gap-1.5 border border-[#3d633b]/60"
           >
             <Settings className="w-4 h-4 text-[#8fb388]" />
-            <span>Cấu Hình Báo Đơn (0585596789)</span>
+            <span>Cài Đặt Shop</span>
           </button>
-
           <button
             onClick={exportCSV}
-            className="px-3.5 py-2 rounded-xl bg-[#2e3b31] border border-[#3d633b]/40 text-xs font-semibold hover:bg-[#3d633b] text-white transition-colors flex items-center gap-1.5"
-            title="Xuất Báo Cáo CSV Excel"
+            className="px-3.5 py-2 rounded-xl bg-[#7c674e]/40 hover:bg-[#7c674e] text-xs font-semibold text-white transition-colors flex items-center gap-1.5 border border-[#7c674e]/60"
           >
-            <Download className="w-4 h-4 text-[#8fb388]" />
-            <span className="hidden sm:inline">Xuất CSV</span>
+            <Download className="w-4 h-4 text-[#e2ebe0]" />
+            <span>Xuất Báo Cáo CSV</span>
           </button>
-
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-[#c2410c] text-white text-xs font-semibold hover:bg-[#9a3412] transition-colors"
+            className="px-3.5 py-2 rounded-xl bg-red-950/60 hover:bg-red-900 text-xs font-semibold text-red-200 transition-colors border border-red-800/60"
           >
-            Quay Về Website
+            Thoát POS
           </button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto space-y-6 mt-6">
-        
-        {/* Zero-Cost Notification Banner Alert */}
-        <div className="p-4 rounded-2xl bg-[#2e3b31] border border-[#3d633b] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-[#3d633b] text-white shrink-0">
-              <Bell className="w-5 h-5 animate-bounce" />
-            </div>
-            <div>
-              <p className="font-bold text-white flex items-center gap-2">
-                <span>📱 Kênh Báo Đơn Tự Động Miễn Phí (Zero Fee Notification)</span>
-                <span className="px-2 py-0.5 rounded-full bg-[#8fb388]/20 text-[#8fb388] text-[10px]">Đang Hoạt Động</span>
-              </p>
-              <p className="text-[#a0b2a3] mt-0.5">
-                Mọi đơn hàng khách đặt mới sẽ gửi thông báo tức thì về điện thoại: <strong className="text-white font-mono">{shopConfig.ownerPhone || '0585596789'}</strong> qua Telegram Bot / Webhook hoàn toàn không tốn phí!
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={testFreeNotification}
-            className="px-3.5 py-2 rounded-xl bg-[#3d633b] hover:bg-[#254124] text-white font-semibold text-xs transition-colors shrink-0 flex items-center gap-1.5"
-          >
-            <Volume2 className="w-4 h-4" />
-            <span>Thử Tiếng Báo Đơn</span>
-          </button>
+      {/* KPI Overview Cards */}
+      <div className="max-w-7xl mx-auto grid grid-cols-2 lg:grid-cols-5 gap-4 my-6">
+        <div className="bg-[#2a362d] border border-[#3d633b]/30 p-4 rounded-2xl">
+          <span className="text-[11px] text-[#8fb388] font-bold uppercase tracking-wider block">Tổng Doanh Thu</span>
+          <p className="font-display text-xl font-bold text-white mt-1">{formatVND(totalRevenue)}</p>
+          <span className="text-[10px] text-gray-400 mt-1 block">Toàn bộ đơn thành công</span>
         </div>
 
-        {/* KPI Analytics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          
-          <div className="p-4 rounded-2xl bg-[#28322a] border border-[#3d633b]/30">
-            <div className="flex items-center justify-between text-[#8fb388] mb-1">
-              <span className="text-xs font-semibold uppercase">Tổng Doanh Thu</span>
-              <DollarSign className="w-4 h-4" />
-            </div>
-            <p className="font-display text-2xl font-bold text-white">
-              {formatVND(totalRevenue)}
-            </p>
-            <span className="text-[11px] text-[#8fb388]">Doanh số từ {orders.length} đơn</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#28322a] border border-amber-500/40">
-            <div className="flex items-center justify-between text-amber-400 mb-1">
-              <span className="text-xs font-semibold uppercase">Đơn Mới Cần Pha</span>
-              <Clock className="w-4 h-4" />
-            </div>
-            <p className="font-display text-2xl font-bold text-amber-400">
-              {pendingCount}
-            </p>
-            <span className="text-[11px] text-[#a0b2a3]">Chờ chủ quán nhận & pha trà</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#28322a] border border-blue-500/40">
-            <div className="flex items-center justify-between text-blue-400 mb-1">
-              <span className="text-xs font-semibold uppercase">Đang Pha / Giao</span>
-              <Truck className="w-4 h-4" />
-            </div>
-            <p className="font-display text-2xl font-bold text-blue-400">
-              {preparingCount + shippingCount}
-            </p>
-            <span className="text-[11px] text-[#a0b2a3]">{preparingCount} đang pha · {shippingCount} đang giao</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#28322a] border border-emerald-500/40">
-            <div className="flex items-center justify-between text-emerald-400 mb-1">
-              <span className="text-xs font-semibold uppercase">Đã Hoàn Thành</span>
-              <CheckCircle className="w-4 h-4" />
-            </div>
-            <p className="font-display text-2xl font-bold text-emerald-400">
-              {completedCount}
-            </p>
-            <span className="text-[11px] text-[#a0b2a3]">Tỷ lệ hoàn thành: {orders.length > 0 ? Math.round((completedCount/orders.length)*100) : 0}%</span>
-          </div>
-
+        <div className="bg-[#2a362d] border border-[#3d633b]/30 p-4 rounded-2xl">
+          <span className="text-[11px] text-amber-400 font-bold uppercase tracking-wider block">Đơn Mới Cần Xử Lý</span>
+          <p className="font-display text-xl font-bold text-amber-400 mt-1">{pendingCount} đơn</p>
+          <span className="text-[10px] text-amber-300/70 mt-1 block">Cần bấm xác nhận</span>
         </div>
 
-        {/* Search & Status Filters */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-4 rounded-2xl bg-[#28322a] border border-[#3d633b]/30">
-          
-          {/* Status Filter Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-hide text-xs">
-            {[
-              { id: 'ALL', label: `Tất Cả (${orders.length})` },
-              { id: 'MOI', label: `🟡 Đơn Mới (${pendingCount})` },
-              { id: 'XAC_NHAN', label: `🔵 Đang Pha (${preparingCount})` },
-              { id: 'DANG_GIAO', label: `🟣 Đang Giao (${shippingCount})` },
-              { id: 'HOAN_THANH', label: `🟢 Hoàn Thành (${completedCount})` },
-              { id: 'HUY', label: `🔴 Đã Hủy` }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveFilter(tab.id)}
-                className={`px-3.5 py-2 rounded-xl font-semibold whitespace-nowrap transition-colors ${
-                  activeFilter === tab.id
-                    ? 'bg-[#3d633b] text-white shadow-sm'
-                    : 'bg-[#1f2721] text-[#a0b2a3] hover:text-white'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Search Box */}
-          <div className="relative min-w-[240px]">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#8fb388]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm theo Mã đơn, Tên, SĐT khách..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-xs text-white placeholder-[#7a8c7e] focus:outline-none focus:border-[#8fb388]"
-            />
-          </div>
-
+        <div className="bg-[#2a362d] border border-[#3d633b]/30 p-4 rounded-2xl">
+          <span className="text-[11px] text-blue-400 font-bold uppercase tracking-wider block">Đang Pha Chế / Giao</span>
+          <p className="font-display text-xl font-bold text-blue-400 mt-1">{preparingCount + shippingCount} đơn</p>
+          <span className="text-[10px] text-blue-300/70 mt-1 block">Đang vận chuyển</span>
         </div>
 
-        {/* Order Ledger Table */}
-        <div className="bg-[#28322a] rounded-2xl border border-[#3d633b]/30 overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              
-              <thead className="bg-[#1f2721] text-[#8fb388] font-semibold border-b border-[#3d633b]/30 uppercase text-[11px] tracking-wider">
-                <tr>
-                  <th className="p-4">Mã Đơn / Thời Gian</th>
-                  <th className="p-4">Thông Tin Khách Hàng</th>
-                  <th className="p-4">Danh Sách Món & Tùy Chỉnh</th>
-                  <th className="p-4">Thanh Toán</th>
-                  <th className="p-4">Trạng Thái</th>
-                  <th className="p-4 text-center">Thao Tác Quản Lý (1-Click)</th>
-                </tr>
-              </thead>
+        <div className="bg-[#2a362d] border border-[#3d633b]/30 p-4 rounded-2xl">
+          <span className="text-[11px] text-[#4ade80] font-bold uppercase tracking-wider block">Đã Đặt Bàn</span>
+          <p className="font-display text-xl font-bold text-[#4ade80] mt-1">{reservations.length} lượt</p>
+          <span className="text-[10px] text-gray-400 mt-1 block">Lịch giữ bàn Zen</span>
+        </div>
 
-              <tbody className="divide-y divide-[#3d633b]/20 text-[#e2ebe0]">
-                {filteredOrders.length === 0 ? (
+        <div className="bg-[#2a362d] border border-[#3d633b]/30 p-4 rounded-2xl">
+          <span className="text-[11px] text-purple-400 font-bold uppercase tracking-wider block">Lời Nhắn Khách Hàng</span>
+          <p className="font-display text-xl font-bold text-purple-300 mt-1">{unreadMsgCount} mới</p>
+          <span className="text-[10px] text-purple-300/70 mt-1 block">Phản hồi góp ý</span>
+        </div>
+      </div>
+
+      {/* Main Admin Tab Navigation */}
+      <div className="max-w-7xl mx-auto flex items-center gap-2 mb-6 border-b border-[#3d633b]/30 pb-3">
+        <button
+          onClick={() => setActiveAdminTab('orders')}
+          className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+            activeAdminTab === 'orders'
+              ? 'bg-[#3d633b] text-white shadow-md'
+              : 'bg-[#2a362d] text-gray-300 hover:bg-[#3d633b]/40'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          <span>Quản Lý Đơn Hàng ({orders.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab('reservations')}
+          className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+            activeAdminTab === 'reservations'
+              ? 'bg-[#3d633b] text-white shadow-md'
+              : 'bg-[#2a362d] text-gray-300 hover:bg-[#3d633b]/40'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Quản Lý Đặt Bàn ({reservations.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab('messages')}
+          className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+            activeAdminTab === 'messages'
+              ? 'bg-[#3d633b] text-white shadow-md'
+              : 'bg-[#2a362d] text-gray-300 hover:bg-[#3d633b]/40'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Lời Nhắn Khách Hàng {unreadMsgCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px]">{unreadMsgCount}</span>}</span>
+        </button>
+      </div>
+
+      {/* TAB 1: ORDERS MANAGEMENT */}
+      {activeAdminTab === 'orders' && (
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Controls: Search & Status Filters */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-[#2a362d] p-4 rounded-2xl border border-[#3d633b]/30">
+            <div className="relative w-full md:w-80">
+              <Search className="w-4 h-4 absolute left-3.5 top-3 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm mã đơn, tên khách, số điện thoại..."
+                className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-[#3d633b]"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-hide">
+              {[
+                { id: 'ALL', label: 'Tất Cả' },
+                { id: 'MOI', label: '🔴 Đơn Mới' },
+                { id: 'XAC_NHAN', label: '🟡 Đã Xác Nhận' },
+                { id: 'DANG_GIAO', label: '🔵 Đang Giao' },
+                { id: 'HOAN_THANH', label: '🟢 Hoàn Thành' },
+                { id: 'HUY', label: '⚪ Đã Hủy' }
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setActiveFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                    activeFilter === f.id
+                      ? 'bg-[#3d633b] text-white shadow-sm'
+                      : 'bg-[#1f2721] text-gray-300 hover:bg-[#3d633b]/30'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Orders Table */}
+          <div className="bg-[#2a362d] rounded-2xl border border-[#3d633b]/30 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-300">
+                <thead className="bg-[#1f2721] text-gray-400 uppercase tracking-wider text-[10px] border-b border-[#3d633b]/30">
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-[#a0b2a3]">
-                      Không có đơn hàng nào phù hợp với bộ lọc hiện tại.
-                    </td>
+                    <th className="py-3.5 px-4">Mã Đơn</th>
+                    <th className="py-3.5 px-4">Thời Gian</th>
+                    <th className="py-3.5 px-4">Khách Hàng & SĐT</th>
+                    <th className="py-3.5 px-4">Địa Chỉ Giao</th>
+                    <th className="py-3.5 px-4">Chi Tiết Món Trà</th>
+                    <th className="py-3.5 px-4">Tổng Tiền</th>
+                    <th className="py-3.5 px-4">Thanh Toán</th>
+                    <th className="py-3.5 px-4">Trạng Thái</th>
+                    <th className="py-3.5 px-4 text-right">Thao Tác Chuyện Đơn</th>
                   </tr>
-                ) : (
-                  filteredOrders.map(order => (
-                    <tr key={order.id} className="hover:bg-[#323e35] transition-colors">
-                      
-                      {/* Col 1: ID & Time */}
-                      <td className="p-4 align-top">
-                        <span className="font-mono text-sm font-bold text-white bg-[#3d633b]/40 px-2 py-0.5 rounded-md border border-[#3d633b]/60 inline-block mb-1">
+                </thead>
+                <tbody className="divide-y divide-[#3d633b]/20">
+                  {filteredOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan="9" className="text-center py-12 text-gray-400">
+                        Không có đơn hàng nào phù hợp với bộ lọc.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOrders.map((order) => (
+                      <tr key={order.id} className="hover:bg-[#334237] transition-colors">
+                        <td className="py-4 px-4 font-mono font-bold text-amber-400">
                           #{order.id}
-                        </span>
-                        <p className="text-[11px] text-[#a0b2a3]">
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap text-gray-400">
                           {formatDate(order.createdAt)}
-                        </p>
-                        <span className="text-[10px] text-[#8fb388] block mt-1">
-                          📲 Đã báo về: {order.ownerAlertPhone || '0585596789'}
-                        </span>
-                      </td>
-
-                      {/* Col 2: Customer Info */}
-                      <td className="p-4 align-top space-y-1">
-                        <p className="font-bold text-white">{order.customer.fullName}</p>
-                        <p className="font-mono text-[#8fb388] text-xs">{order.customer.phone}</p>
-                        <p className="text-[11px] text-[#a0b2a3] line-clamp-2 max-w-xs">
-                          📍 {order.customer.address}
-                        </p>
-                        {order.customer.notes && (
-                          <p className="text-[10px] text-amber-300 italic">
-                            💬 Ghi chú: {order.customer.notes}
-                          </p>
-                        )}
-                      </td>
-
-                      {/* Col 3: Items Ordered */}
-                      <td className="p-4 align-top space-y-2 max-w-xs">
-                        {order.items.map((it, idx) => (
-                          <div key={idx} className="p-2 rounded-lg bg-[#1f2721]/60 border border-[#3d633b]/20 text-[11px]">
-                            <p className="font-bold text-white">{it.item.name} x{it.quantity}</p>
-                            <p className="text-[10px] text-[#a0b2a3]">
-                              {it.size?.name} · {it.sweetness} · {it.ice}
-                            </p>
-                            {it.toppings && it.toppings.length > 0 && (
-                              <p className="text-[10px] text-[#8fb388]">
-                                Topping: {it.toppings.map(t => t.name).join(', ')}
-                              </p>
+                        </td>
+                        <td className="py-4 px-4">
+                          <p className="font-bold text-white">{order.customer.fullName}</p>
+                          <a href={`tel:${order.customer.phone}`} className="text-[#8fb388] hover:underline flex items-center gap-1 mt-0.5">
+                            <PhoneCall className="w-3 h-3" />
+                            <span>{order.customer.phone}</span>
+                          </a>
+                        </td>
+                        <td className="py-4 px-4 max-w-xs">
+                          <p className="line-clamp-2 text-gray-300">{order.customer.address}</p>
+                          {order.customer.notes && (
+                            <p className="text-[10px] text-amber-300/80 italic mt-0.5">📝 "{order.customer.notes}"</p>
+                          )}
+                        </td>
+                        <td className="py-4 px-4">
+                          <ul className="space-y-1 max-w-xs">
+                            {order.items?.map((it, idx) => (
+                              <li key={idx} className="text-[11px]">
+                                <strong className="text-white">{it.quantity}x</strong> {it.item?.name} ({it.size?.name})
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
+                        <td className="py-4 px-4 font-bold text-white whitespace-nowrap">
+                          {formatVND(order.payment?.grandTotal)}
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            order.payment?.method === 'momo' ? 'bg-[#a50064]/30 text-pink-300 border border-[#a50064]/40' :
+                            order.payment?.method === 'bank' ? 'bg-blue-900/30 text-blue-300 border border-blue-700/40' :
+                            'bg-amber-900/30 text-amber-300 border border-amber-700/40'
+                          }`}>
+                            {order.payment?.method?.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            order.status === 'MOI' ? 'bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse' :
+                            order.status === 'XAC_NHAN' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                            order.status === 'DANG_GIAO' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' :
+                            order.status === 'HOAN_THANH' ? 'bg-green-500/20 text-green-300 border border-green-500/40' :
+                            'bg-gray-700 text-gray-400'
+                          }`}>
+                            {order.status === 'MOI' && '🔴 Đơn Mới'}
+                            {order.status === 'XAC_NHAN' && '🟡 Đã Xác Nhận'}
+                            {order.status === 'DANG_GIAO' && '🔵 Đang Giao'}
+                            {order.status === 'HOAN_THANH' && '🟢 Hoàn Thành'}
+                            {order.status === 'HUY' && '⚪ Đã Hủy'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {order.status === 'MOI' && (
+                              <button
+                                onClick={() => handleStatusChange(order.id, 'XAC_NHAN')}
+                                className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px]"
+                              >
+                                Nhận Đơn
+                              </button>
+                            )}
+                            {order.status === 'XAC_NHAN' && (
+                              <button
+                                onClick={() => handleStatusChange(order.id, 'DANG_GIAO')}
+                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px]"
+                              >
+                                Giao Trà
+                              </button>
+                            )}
+                            {order.status === 'DANG_GIAO' && (
+                              <button
+                                onClick={() => handleStatusChange(order.id, 'HOAN_THANH')}
+                                className="px-2.5 py-1 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold text-[10px]"
+                              >
+                                Hoàn Thành
+                              </button>
+                            )}
+                            {order.status !== 'HOAN_THANH' && order.status !== 'HUY' && (
+                              <button
+                                onClick={() => handleStatusChange(order.id, 'HUY')}
+                                className="px-2.5 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px]"
+                              >
+                                Hủy
+                              </button>
                             )}
                           </div>
-                        ))}
-                      </td>
-
-                      {/* Col 4: Payment Summary */}
-                      <td className="p-4 align-top space-y-1">
-                        <p className="font-bold text-sm text-emerald-400">
-                          {formatVND(order.payment.grandTotal)}
-                        </p>
-                        <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                          order.payment.method === 'momo' ? 'bg-[#fff0f6] text-[#a50064]' :
-                          order.payment.method === 'bank' ? 'bg-[#edf4ff] text-[#0052cc]' :
-                          'bg-[#f7f4ef] text-[#3d633b]'
-                        }`}>
-                          {order.payment.method.toUpperCase()}
-                        </span>
-                        <p className="text-[10px] text-[#a0b2a3]">
-                          {order.payment.isPaid ? '✓ Đã thanh toán' : '⏳ Thu tiền khi giao'}
-                        </p>
-                      </td>
-
-                      {/* Col 5: Status Tag */}
-                      <td className="p-4 align-top">
-                        {order.status === 'MOI' && (
-                          <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40 text-[11px]">
-                            🟡 ĐƠN MỚI
-                          </span>
-                        )}
-                        {order.status === 'XAC_NHAN' && (
-                          <span className="px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40 text-[11px]">
-                            🔵 ĐANG PHA CHẾ
-                          </span>
-                        )}
-                        {order.status === 'DANG_GIAO' && (
-                          <span className="px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/40 text-[11px]">
-                            🟣 ĐANG GIAO HÀNG
-                          </span>
-                        )}
-                        {order.status === 'HOAN_THANH' && (
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 text-[11px]">
-                            🟢 HOÀN THÀNH
-                          </span>
-                        )}
-                        {order.status === 'HUY' && (
-                          <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40 text-[11px]">
-                            🔴 ĐÃ HỦY
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Col 6: 1-Click Actions */}
-                      <td className="p-4 align-top">
-                        <div className="flex flex-col gap-1.5 min-w-[140px]">
-                          {order.status === 'MOI' && (
-                            <button
-                              onClick={() => handleStatusChange(order.id, 'XAC_NHAN')}
-                              className="px-3 py-1.5 rounded-lg bg-[#3d633b] hover:bg-[#254124] text-white text-[11px] font-bold transition-colors"
-                            >
-                              ✓ Nhận & Pha Trà
-                            </button>
-                          )}
-                          {order.status === 'XAC_NHAN' && (
-                            <button
-                              onClick={() => handleStatusChange(order.id, 'DANG_GIAO')}
-                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-colors"
-                            >
-                              🛵 Bắt Đầu Giao
-                            </button>
-                          )}
-                          {order.status === 'DANG_GIAO' && (
-                            <button
-                              onClick={() => handleStatusChange(order.id, 'HOAN_THANH')}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-colors"
-                            >
-                              🎉 Hoàn Thành Đơn
-                            </button>
-                          )}
-                          {order.status !== 'HOAN_THANH' && order.status !== 'HUY' && (
-                            <button
-                              onClick={() => handleStatusChange(order.id, 'HUY')}
-                              className="px-3 py-1 rounded-lg bg-rose-950/60 text-rose-300 hover:bg-rose-900 border border-rose-800 text-[10px] transition-colors"
-                            >
-                              ✕ Hủy Đơn
-                            </button>
-                          )}
-                        </div>
-                      </td>
-
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+      )}
 
-      </div>
+      {/* TAB 2: RESERVATIONS MANAGEMENT */}
+      {activeAdminTab === 'reservations' && (
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="bg-[#2a362d] rounded-2xl border border-[#3d633b]/30 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-300">
+                <thead className="bg-[#1f2721] text-gray-400 uppercase tracking-wider text-[10px] border-b border-[#3d633b]/30">
+                  <tr>
+                    <th className="py-3.5 px-4">Mã Đặt Bàn</th>
+                    <th className="py-3.5 px-4">Khách Hàng & SĐT</th>
+                    <th className="py-3.5 px-4">Lịch Ghé Quán</th>
+                    <th className="py-3.5 px-4">Số Khách</th>
+                    <th className="py-3.5 px-4">Không Gian Ưa Thích</th>
+                    <th className="py-3.5 px-4">Trạng Thái</th>
+                    <th className="py-3.5 px-4 text-right">Xác Nhận Lịch</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#3d633b]/20">
+                  {reservations.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-12 text-gray-400">
+                        Chưa có lịch đặt bàn nào.
+                      </td>
+                    </tr>
+                  ) : (
+                    reservations.map((res) => (
+                      <tr key={res.id} className="hover:bg-[#334237] transition-colors">
+                        <td className="py-4 px-4 font-mono font-bold text-amber-400">
+                          #{res.id}
+                        </td>
+                        <td className="py-4 px-4">
+                          <p className="font-bold text-white">{res.name}</p>
+                          <a href={`tel:${res.phone}`} className="text-[#8fb388] hover:underline flex items-center gap-1 mt-0.5">
+                            <PhoneCall className="w-3 h-3" />
+                            <span>{res.phone}</span>
+                          </a>
+                        </td>
+                        <td className="py-4 px-4 font-bold text-amber-300">
+                          📅 {res.date} lúc {res.time}
+                        </td>
+                        <td className="py-4 px-4 font-bold text-white">
+                          👥 {res.guests} Khách
+                        </td>
+                        <td className="py-4 px-4 text-gray-300">
+                          ⛩️ {res.roomType}
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            res.status === 'CHO_XAC_NHAN' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                            res.status === 'DA_XAC_NHAN' ? 'bg-green-500/20 text-green-300 border border-green-500/40' :
+                            'bg-gray-700 text-gray-400'
+                          }`}>
+                            {res.status === 'CHO_XAC_NHAN' ? '🟡 Chờ Xác Nhận' : res.status === 'DA_XAC_NHAN' ? '🟢 Đã Xác Nhận' : '⚪ Đã Hủy'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-right whitespace-nowrap">
+                          {res.status === 'CHO_XAC_NHAN' && (
+                            <button
+                              onClick={() => handleResStatusChange(res.id, 'DA_XAC_NHAN')}
+                              className="px-3 py-1 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold text-[10px]"
+                            >
+                              Giữ Bàn Ngay
+                            </button>
+                          )}
+                          {res.status !== 'DA_HUY' && (
+                            <button
+                              onClick={() => handleResStatusChange(res.id, 'DA_HUY')}
+                              className="px-3 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px] ml-1.5"
+                            >
+                              Hủy
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Config Modal for Phone 0585596789 & Telegram Free Alerts */}
+      {/* TAB 3: CUSTOMER MESSAGES */}
+      {activeAdminTab === 'messages' && (
+        <div className="max-w-7xl mx-auto space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {messages.length === 0 ? (
+              <div className="col-span-2 text-center py-12 text-gray-400 bg-[#2a362d] rounded-2xl">
+                Chưa có lời nhắn nào từ khách hàng.
+              </div>
+            ) : (
+              messages.map((msg) => (
+                <div key={msg.id} className={`p-4 rounded-2xl border transition-all ${
+                  msg.isRead ? 'bg-[#2a362d] border-[#3d633b]/20 text-gray-300' : 'bg-[#334237] border-purple-500/50 text-white shadow-md'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-white">{msg.name}</span>
+                      {!msg.isRead && (
+                        <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white text-[9px] font-bold">Mới</span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-gray-400">{formatDate(msg.createdAt)}</span>
+                  </div>
+                  <p className="text-xs leading-relaxed italic bg-[#1f2721]/50 p-3 rounded-xl border border-white/5 mb-3">
+                    "{msg.message}"
+                  </p>
+                  {!msg.isRead && (
+                    <button
+                      onClick={() => handleMarkMsgRead(msg.id)}
+                      className="px-3 py-1 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-[10px] font-bold flex items-center gap-1 ml-auto"
+                    >
+                      <Check className="w-3 h-3" />
+                      Đánh dấu đã đọc
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CONFIG MODAL */}
       {isConfigOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[#28322a] border border-[#3d633b] rounded-3xl max-w-md w-full p-6 shadow-2xl relative text-white space-y-4">
-            
-            <button
-              onClick={() => setIsConfigOpen(false)}
-              className="absolute top-4 right-4 p-2 text-[#a0b2a3] hover:text-white rounded-full bg-[#1f2721]"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 pb-2 border-b border-[#3d633b]/40">
-              <Settings className="w-6 h-6 text-[#8fb388]" />
-              <h3 className="font-serif-zen text-xl font-bold">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#2a362d] border border-[#3d633b]/40 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#3d633b]/40">
+              <h3 className="font-display text-lg font-bold text-white flex items-center gap-2">
+                <Settings className="w-5 h-5 text-[#8fb388]" />
                 Cấu Hình Báo Đơn Tự Động
               </h3>
+              <button onClick={() => setIsConfigOpen(false)} className="p-1.5 text-gray-400 hover:text-white rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <form onSubmit={handleSaveConfig} className="space-y-4 text-xs">
-              
               <div>
-                <label className="font-bold text-[#8fb388] block mb-1">
-                  Số Điện Thoại Nhận Báo Đơn Chủ Quán *
-                </label>
+                <label className="block text-gray-300 font-bold mb-1">Số Điện Thoại Chủ Quán (Chị Linh)</label>
                 <input
                   type="text"
-                  required
                   value={shopConfig.ownerPhone}
                   onChange={(e) => setShopConfigState({ ...shopConfig, ownerPhone: e.target.value })}
-                  placeholder="0585596789"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-white font-mono focus:outline-none focus:border-[#8fb388]"
+                  className="w-full px-3 py-2 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-white"
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-[#1f2721] border border-[#3d633b]/30 space-y-2">
-                <p className="font-bold text-white flex items-center gap-1.5">
-                  <span>🤖 Tích Hợp Telegram Bot (Không Tốn Phí)</span>
-                </p>
-                <p className="text-[11px] text-[#a0b2a3]">
-                  Tạo Bot miễn phí trên Telegram qua @BotFather để nhận tin nhắn báo đơn trực tiếp về điện thoại {shopConfig.ownerPhone || '0585596789'}.
-                </p>
+              <div>
+                <label className="block text-gray-300 font-bold mb-1">Telegram Bot Token (Miễn phí)</label>
                 <input
                   type="text"
-                  value={shopConfig.notifyTelegramBotToken}
+                  value={shopConfig.notifyTelegramBotToken || ''}
                   onChange={(e) => setShopConfigState({ ...shopConfig, notifyTelegramBotToken: e.target.value })}
-                  placeholder="Telegram Bot Token (Tùy chọn)"
-                  className="w-full px-3 py-2 rounded-lg bg-[#28322a] border border-[#3d633b]/40 text-white text-[11px]"
+                  placeholder="Ví dụ: 789123456:AAFxYz..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-white font-mono text-[11px]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-gray-300 font-bold mb-1">Telegram Chat ID (Điện thoại Chị Linh)</label>
                 <input
                   type="text"
-                  value={shopConfig.notifyTelegramChatId}
+                  value={shopConfig.notifyTelegramChatId || ''}
                   onChange={(e) => setShopConfigState({ ...shopConfig, notifyTelegramChatId: e.target.value })}
-                  placeholder="Telegram Chat ID (Tùy chọn)"
-                  className="w-full px-3 py-2 rounded-lg bg-[#28322a] border border-[#3d633b]/40 text-white text-[11px]"
+                  placeholder="Ví dụ: 987654321"
+                  className="w-full px-3 py-2 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-white font-mono text-[11px]"
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="soundAlert"
-                  checked={shopConfig.enableSoundAlert}
-                  onChange={(e) => setShopConfigState({ ...shopConfig, enableSoundAlert: e.target.checked })}
-                  className="w-4 h-4 accent-[#3d633b]"
-                />
-                <label htmlFor="soundAlert" className="text-xs">
-                  Phát tiếng chuông báo khi có đơn mới
-                </label>
+              <div className="pt-2 border-t border-[#3d633b]/30 flex justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={testFreeNotification}
+                  className="py-2.5 px-4 rounded-xl bg-amber-700 hover:bg-amber-600 text-white font-bold"
+                >
+                  🔔 Test Chuông & Tin Nhắn
+                </button>
+                <button
+                  type="submit"
+                  className="py-2.5 px-5 rounded-xl bg-[#3d633b] hover:bg-green-600 text-white font-bold"
+                >
+                  Lưu Cấu Hình
+                </button>
               </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-2xl bg-[#3d633b] text-white font-semibold text-sm hover:bg-[#254124] transition-colors"
-              >
-                Lưu Cấu Hình
-              </button>
-
             </form>
-
           </div>
         </div>
       )}

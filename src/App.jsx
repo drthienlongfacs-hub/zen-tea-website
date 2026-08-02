@@ -11,6 +11,7 @@ import ZenSoundscapeModal from './components/ZenSoundscapeModal';
 import BlogArticleModal from './components/BlogArticleModal';
 import PolicyModal from './components/PolicyModal';
 import AdminOrderManager from './components/AdminOrderManager';
+import { saveContactMessage } from './utils/orderService';
 
 import {
   MENU_CATEGORIES,
@@ -240,6 +241,11 @@ export default function App() {
 
   const handleContactSubmit = (e) => {
     e.preventDefault();
+    if (!contactName || !contactMessage) return;
+    saveContactMessage({
+      name: contactName,
+      message: contactMessage
+    });
     setContactSubmitted(true);
     showToast('✉️ Đã gửi lời nhắn thành công! An Nhiên sẽ phản hồi sớm.', 'success');
     setTimeout(() => {

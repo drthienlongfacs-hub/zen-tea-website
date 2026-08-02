@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Calendar, Clock, Users, CheckCircle2, Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { saveReservation } from '../utils/orderService';
 
 export default function ReservationModal({ isOpen, onClose }) {
   // ✅ All hooks declared BEFORE any early return (Rules of Hooks)
@@ -11,6 +12,7 @@ export default function ReservationModal({ isOpen, onClose }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [isBooked, setIsBooked] = useState(false);
+  const [resId, setResId] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -18,6 +20,17 @@ export default function ReservationModal({ isOpen, onClose }) {
       alert('Vui lòng chọn ngày và điền tên, số điện thoại.');
       return;
     }
+
+    const created = saveReservation({
+      name,
+      phone,
+      date,
+      time,
+      guests,
+      roomType
+    });
+
+    setResId(created.id);
     setIsBooked(true);
     confetti({
       particleCount: 60,

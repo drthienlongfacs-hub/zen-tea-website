@@ -1,12 +1,16 @@
-// Real-Time Order Management & Free Phone Notification Service
+// Real-Time Order, Reservation & Message Management Engine
 // Compliant with Vietnam Data Protection Regulations (Luật số 91/2025/QH15 & NĐ 356/2025/NĐ-CP)
 
 const STORAGE_KEY = 'AN_NHIEN_ORDERS_LEDGER_V1';
+const RESERVATIONS_KEY = 'AN_NHIEN_RESERVATIONS_LEDGER_V1';
+const MESSAGES_KEY = 'AN_NHIEN_MESSAGES_LEDGER_V1';
 const CONFIG_KEY = 'AN_NHIEN_SHOP_CONFIG_V1';
 
 // Default Owner Configuration
 export const defaultShopConfig = {
+  ownerName: 'Chị Linh',
   ownerPhone: '0585596789',
+  shopAddress: 'Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM',
   notifyTelegramBotToken: '', // Free Telegram Bot Token (optional)
   notifyTelegramChatId: '',   // Free Telegram Chat ID (optional)
   enableSoundAlert: true,
@@ -30,7 +34,10 @@ export function saveShopConfig(config) {
   }
 }
 
-// Get all orders persistent in storage
+/* ────────────────────────────────────────────────────
+   ORDERS LEDGER SERVICE
+──────────────────────────────────────────────────── */
+
 export function getOrders() {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
@@ -41,7 +48,6 @@ export function getOrders() {
   }
 }
 
-// Save order and trigger notifications
 export function saveOrder(newOrderData) {
   const currentOrders = getOrders();
   const shopConfig = getShopConfig();
@@ -81,7 +87,6 @@ export function saveOrder(newOrderData) {
   return newOrder;
 }
 
-// Update order status (1-click action for Shop Owner)
 export function updateOrderStatus(orderId, newStatus) {
   const currentOrders = getOrders();
   const updated = currentOrders.map(order => {
@@ -99,7 +104,106 @@ export function updateOrderStatus(orderId, newStatus) {
   return updated;
 }
 
-// Zero-Cost Free Notification Service to 0585596789
+export function searchOrders(query) {
+  if (!query) return [];
+  const q = query.trim().toLowerCase();
+  const allOrders = getOrders();
+  return allOrders.filter(o =>
+    o.id.toLowerCase().includes(q) ||
+    o.customer.phone.includes(q) ||
+    o.customer.fullName.toLowerCase().includes(q)
+  );
+}
+
+/* ────────────────────────────────────────────────────
+   RESERVATIONS LEDGER SERVICE
+──────────────────────────────────────────────────── */
+
+export function getReservations() {
+  try {
+    const data = localStorage.getItem(RESERVATIONS_KEY);
+    if (!data) return getInitialMockReservations();
+    return JSON.parse(data);
+  } catch (e) {
+    return getInitialMockReservations();
+  }
+}
+
+export function saveReservation(reservationData) {
+  const currentReservations = getReservations();
+  const shopConfig = getShopConfig();
+
+  const newReservation = {
+    id: 'RES' + Math.floor(10000 + Math.random() * 90000),
+    createdAt: new Date().toISOString(),
+    status: 'CHO_XAC_NHAN', // CHO_XAC_NHAN, DA_XAC_NHAN, DA_HUY
+    name: reservationData.name,
+    phone: reservationData.phone,
+    date: reservationData.date,
+    time: reservationData.time,
+    guests: reservationData.guests,
+    roomType: reservationData.roomType,
+    ownerAlertPhone: shopConfig.ownerPhone || '0585596789'
+  };
+
+  const updated = [newReservation, ...currentReservations];
+  localStorage.setItem(RESERVATIONS_KEY, JSON.stringify(updated));
+
+  window.dispatchEvent(new CustomEvent('new_reservation_placed', { detail: newReservation }));
+
+  sendFreeReservationNotificationToOwner(newReservation, shopConfig);
+
+  return newReservation;
+}
+
+export function updateReservationStatus(resId, newStatus) {
+  const current = getReservations();
+  const updated = current.map(r => r.id === resId ? { ...r, status: newStatus, updatedAt: new Date().toISOString() } : r);
+  localStorage.setItem(RESERVATIONS_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('reservation_status_updated', { detail: { resId, newStatus } }));
+  return updated;
+}
+
+/* ────────────────────────────────────────────────────
+   CONTACT MESSAGES LEDGER SERVICE
+──────────────────────────────────────────────────── */
+
+export function getContactMessages() {
+  try {
+    const data = localStorage.getItem(MESSAGES_KEY);
+    if (!data) return getInitialMockMessages();
+    return JSON.parse(data);
+  } catch (e) {
+    return getInitialMockMessages();
+  }
+}
+
+export function saveContactMessage(msgData) {
+  const current = getContactMessages();
+  const newMsg = {
+    id: 'MSG' + Math.floor(1000 + Math.random() * 9000),
+    createdAt: new Date().toISOString(),
+    name: msgData.name,
+    message: msgData.message,
+    isRead: false
+  };
+  const updated = [newMsg, ...current];
+  localStorage.setItem(MESSAGES_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('new_contact_message', { detail: newMsg }));
+  return newMsg;
+}
+
+export function markMessageRead(msgId) {
+  const current = getContactMessages();
+  const updated = current.map(m => m.id === msgId ? { ...m, isRead: true } : m);
+  localStorage.setItem(MESSAGES_KEY, JSON.stringify(updated));
+  return updated;
+}
+
+/* ────────────────────────────────────────────────────
+   NOTIFICATIONS SERVICE
+──────────────────────────────────────────────────── */
+
 export function sendFreeNotificationToOwner(order, shopConfig) {
   const phoneTarget = shopConfig.ownerPhone || '0585596789';
   const orderSummaryText = `🚨 BÁO ĐƠN HÀNG MỚI (#${order.id})\n` +
@@ -109,12 +213,11 @@ export function sendFreeNotificationToOwner(order, shopConfig) {
     `🍵 Số món: ${order.items.length} phần trà\n` +
     `💰 Tổng tiền: ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(order.payment.grandTotal)}\n` +
     `💳 Thanh toán: ${order.payment.method.toUpperCase()}\n` +
-    `📱 Báo về máy chủ quán: ${phoneTarget}`;
+    `📱 Chủ quán: Chị Linh (${phoneTarget})`;
 
   console.log('--- FREE NOTIFICATION DISPATCHED TO ' + phoneTarget + ' ---');
   console.log(orderSummaryText);
 
-  // If owner configured a free Telegram Bot, send HTTP POST zero-fee alert directly to phone Telegram app!
   if (shopConfig.notifyTelegramBotToken && shopConfig.notifyTelegramChatId) {
     try {
       fetch(`https://api.telegram.org/bot${shopConfig.notifyTelegramBotToken}/sendMessage`, {
@@ -131,20 +234,51 @@ export function sendFreeNotificationToOwner(order, shopConfig) {
     }
   }
 
-  // Play audio alert bell if enabled
   if (shopConfig.enableSoundAlert) {
     playNewOrderBellSound();
   }
 }
 
-// Web Audio API Bell Sound for New Orders
+export function sendFreeReservationNotificationToOwner(reservation, shopConfig) {
+  const phoneTarget = shopConfig.ownerPhone || '0585596789';
+  const summaryText = `📅 BÁO ĐẶT BÀN MỚI (#${reservation.id})\n` +
+    `👤 Khách hàng: ${reservation.name}\n` +
+    `📞 SĐT: ${reservation.phone}\n` +
+    `📆 Ngày ghé: ${reservation.date} lúc ${reservation.time}\n` +
+    `👥 Số khách: ${reservation.guests} người\n` +
+    `⛩️ Không gian: ${reservation.roomType}\n` +
+    `📱 Chủ quán: Chị Linh (${phoneTarget})`;
+
+  console.log('--- RESERVATION NOTIFICATION DISPATCHED TO ' + phoneTarget + ' ---');
+  console.log(summaryText);
+
+  if (shopConfig.notifyTelegramBotToken && shopConfig.notifyTelegramChatId) {
+    try {
+      fetch(`https://api.telegram.org/bot${shopConfig.notifyTelegramBotToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: shopConfig.notifyTelegramChatId,
+          text: summaryText,
+          parse_mode: 'HTML'
+        })
+      }).catch(err => console.error('Telegram reservation notification error:', err));
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  if (shopConfig.enableSoundAlert) {
+    playNewOrderBellSound();
+  }
+}
+
 export function playNewOrderBellSound() {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const ctx = new AudioContext();
     if (ctx.state === 'suspended') ctx.resume();
 
-    // Two-tone bell ding-dong
     const now = ctx.currentTime;
     
     // Tone 1
@@ -173,12 +307,15 @@ export function playNewOrderBellSound() {
   }
 }
 
-// Initial Mock Orders for Shop Demonstration
+/* ────────────────────────────────────────────────────
+   INITIAL MOCK DATA
+──────────────────────────────────────────────────── */
+
 function getInitialMockOrders() {
   return [
     {
       id: 'AN859210',
-      createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 mins ago
+      createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
       status: 'MOI',
       items: [
         {
@@ -209,7 +346,7 @@ function getInitialMockOrders() {
     },
     {
       id: 'AN748192',
-      createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 mins ago
+      createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
       status: 'XAC_NHAN',
       items: [
         {
@@ -246,6 +383,35 @@ function getInitialMockOrders() {
         shippingFee: 20000
       },
       ownerAlertPhone: '0585596789'
+    }
+  ];
+}
+
+function getInitialMockReservations() {
+  return [
+    {
+      id: 'RES91823',
+      createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      status: 'DA_XAC_NHAN',
+      name: 'Nguyễn Văn Minh',
+      phone: '0903123456',
+      date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+      time: '14:00',
+      guests: 4,
+      roomType: 'Phòng Trà Tĩnh Lặng (Ấm cúng, thiền định)',
+      ownerAlertPhone: '0585596789'
+    }
+  ];
+}
+
+function getInitialMockMessages() {
+  return [
+    {
+      id: 'MSG101',
+      createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+      name: 'Phạm Thanh Thảo',
+      message: 'Quán có trà Uji Matcha dùng sữa hạt yến mạch không ạ? Mình dị ứng sữa bò.',
+      isRead: false
     }
   ];
 }

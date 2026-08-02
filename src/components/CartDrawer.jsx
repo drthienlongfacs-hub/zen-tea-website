@@ -22,21 +22,33 @@ export default function CartDrawer({
   const subtotal = cartItems.reduce((sum, item) => sum + item.totalPrice, 0);
   const shippingFee = subtotal >= 150000 || subtotal === 0 ? 0 : 20000;
   
-  let discount = 0;
-  if (appliedVoucher) {
-    discount = Math.round(subtotal * 0.2); // 20% off
-  }
-
-  const grandTotal = Math.max(0, subtotal - discount + shippingFee);
-
-  const handleApplyVoucher = () => {
-    if (voucherCode.trim().toUpperCase() === 'THIEN2026') {
-      setAppliedVoucher({ code: 'THIEN2026', discountPercent: 20 });
+  const handleApplyVoucher = (codeToApply) => {
+    const code = (codeToApply || voucherCode).trim().toUpperCase();
+    if (code === 'THIEN2026') {
+      setAppliedVoucher({ code: 'THIEN2026', type: 'percent', value: 20, text: 'Giảm 20% tổng đơn' });
       setVoucherError('');
+      setVoucherCode('THIEN2026');
+    } else if (code === 'ANNHIEN10') {
+      setAppliedVoucher({ code: 'ANNHIEN10', type: 'percent', value: 10, text: 'Giảm 10% tổng đơn' });
+      setVoucherError('');
+      setVoucherCode('ANNHIEN10');
+    } else if (code === 'MATCHA30') {
+      setAppliedVoucher({ code: 'MATCHA30', type: 'fixed', value: 30000, text: 'Giảm 30.000đ' });
+      setVoucherError('');
+      setVoucherCode('MATCHA30');
     } else {
-      setVoucherError('Mã ưu đãi không hợp lệ. Thử nhập: THIEN2026');
+      setVoucherError('Mã không hợp lệ. Chọn mã có sẵn bên dưới!');
     }
   };
+
+  let discount = 0;
+  if (appliedVoucher) {
+    if (appliedVoucher.type === 'percent') {
+      discount = Math.round(subtotal * (appliedVoucher.value / 100));
+    } else if (appliedVoucher.type === 'fixed') {
+      discount = Math.min(subtotal, appliedVoucher.value);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-fadeIn">
@@ -147,15 +159,38 @@ export default function CartDrawer({
                   className="flex-1 px-3 py-2 rounded-xl border border-[#7c674e]/20 bg-[#fcfbfa] text-xs focus:outline-none focus:border-[#3d633b] uppercase"
                 />
                 <button
-                  onClick={handleApplyVoucher}
+                  onClick={() => handleApplyVoucher()}
                   className="px-3 py-2 rounded-xl bg-[#7c674e] text-white text-xs font-semibold hover:bg-[#63513d]"
                 >
                   Áp Dụng
                 </button>
               </div>
+
+              {/* 1-click preset voucher tags */}
+              <div className="flex gap-1.5 pt-1">
+                {[
+                  { code: 'THIEN2026', label: 'THIEN2026 (-20%)' },
+                  { code: 'ANNHIEN10', label: 'ANNHIEN10 (-10%)' },
+                  { code: 'MATCHA30', label: 'MATCHA30 (-30k)' }
+                ].map(v => (
+                  <button
+                    key={v.code}
+                    type="button"
+                    onClick={() => handleApplyVoucher(v.code)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border transition-all ${
+                      appliedVoucher?.code === v.code
+                        ? 'bg-[#3d633b] text-white border-[#3d633b]'
+                        : 'bg-[#e2ebe0]/60 text-[#254124] border-[#3d633b]/20 hover:bg-[#3d633b] hover:text-white'
+                    }`}
+                  >
+                    🏷️ {v.label}
+                  </button>
+                ))}
+              </div>
+
               {appliedVoucher && (
-                <p className="text-[11px] text-[#3d633b] font-semibold flex items-center gap-1">
-                  <Ticket className="w-3 h-3" /> Đã giảm 20% tổng đơn trà!
+                <p className="text-[11px] text-[#3d633b] font-semibold flex items-center gap-1 pt-1">
+                  <Ticket className="w-3.5 h-3.5" /> Áp dụng thành công: {appliedVoucher.text}!
                 </p>
               )}
               {voucherError && (
