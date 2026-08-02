@@ -46,11 +46,11 @@ export default function Footer({ onOpenPolicy }) {
           <ul className="space-y-2.5 text-xs text-[#a0b2a3]">
             <li className="flex items-start gap-2">
               <MapPin className="w-4 h-4 text-[#8fb388] shrink-0 mt-0.5" />
-              <span>Toà B - Golden An Khánh, Hoài Đức, Hà Nội</span>
+              <span>Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM</span>
             </li>
             <li className="flex items-center gap-2">
               <Phone className="w-4 h-4 text-[#8fb388] shrink-0" />
-              <a href="tel:0973420316" className="hover:text-white">Hotline: 0973 420 316</a>
+              <a href="tel:0585596789" className="hover:text-white">Hotline: 0585 596 789 (Chị Linh)</a>
             </li>
             <li className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-[#8fb388] shrink-0" />

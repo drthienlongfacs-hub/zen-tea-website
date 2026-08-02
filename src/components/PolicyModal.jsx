@@ -31,13 +31,13 @@ Dữ liệu đơn hàng được lưu trữ không quá 24 tháng kể từ ngà
 - Sản phẩm trà cụ / dụng cụ bị nứt vỡ trong quá trình vận chuyển.
 
 2. THỜI GIAN ĐỔI TRẢ
-Quý khách vui lòng thông báo cho hotline 0973 420 316 trong vòng 24h kể từ khi nhận hàng. Quán sẽ lập tức pha chế ly mới hoặc hoàn 100% tiền qua MoMo / Chuyển khoản trong vòng 15 phút.`
+Quý khách vui lòng thông báo cho hotline 0585 596 789 (Chị Linh) trong vòng 24h kể từ khi nhận hàng. Quán sẽ lập tức pha chế ly mới hoặc hoàn 100% tiền qua MoMo / Chuyển khoản trong vòng 15 phút.`
     },
     shipping: {
       title: 'Chính Sách Giao Nhận & Kiểm Hàng',
       icon: <Truck className="w-6 h-6 text-[#3d633b]" />,
       content: `1. PHẠM VI & THỜI GIAN GIAO HÀNG
-An Nhiên Trà Quán phục vụ giao trà tận nơi trong bán kính 10km tại Hà Nội. Thời gian giao hàng từ 15 đến 35 phút để đảm bảo lớp bọt foam Matcha giữ nguyên độ tươi mịn.
+An Nhiên Trà Quán phục vụ giao trà tận nơi trong bán kính 10km tại TP. Hồ Chí Minh (xuất phát từ Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú). Thời gian giao hàng từ 15 đến 35 phút để đảm bảo lớp bọt foam Matcha giữ nguyên độ tươi mịn.
 
 2. PHÍ GIAO HÀNG
 - Đơn hàng dưới 150.000đ: Phí ship đồng giá 20.000đ.

@@ -194,8 +194,8 @@ function getInitialMockOrders() {
       customer: {
         fullName: 'Trần Hoàng Nam',
         phone: '0988123456',
-        address: 'Toà A3 - Vinhomes Smart City, Nam Từ Liêm, Hà Nội',
-        notes: 'Giao gấp giúp mình để trà giữ foam mịn nhé!'
+        address: 'Block A - Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM',
+        notes: 'Giao lên tầng 8 giúp mình để trà giữ foam mịn nhé!'
       },
       payment: {
         method: 'momo',
@@ -234,7 +234,7 @@ function getInitialMockOrders() {
       customer: {
         fullName: 'Lê Thu Hương',
         phone: '0912345678',
-        address: 'Số 18 Ngõ 120 Trần Duy Hưng, Cầu Giấy, Hà Nội',
+        address: 'Số 45 Lạc Long Quân, Phường 3, Quận 11, TP.HCM',
         notes: ''
       },
       payment: {
