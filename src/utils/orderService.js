@@ -13,6 +13,7 @@ export const defaultShopConfig = {
   shopAddress: 'Chung cư Valeo Đầm Sen, 318/5 Trịnh Đình Trọng, P. Hòa Thạnh, Q. Tân Phú, TP.HCM',
   notifyTelegramBotToken: '***TELEGRAM_TOKEN_REVOKED***',
   notifyTelegramChatId: '7946238337',
+  sepayApiToken: '', // SePay API Key (optional for live auto-verify)
   enableSoundAlert: true,
   enableAutoNotify: true
 };
@@ -128,6 +129,48 @@ export function confirmPaymentReceived(orderId) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent('order_payment_confirmed', { detail: { orderId } }));
   return updated;
+}
+
+// SePay Live API Auto-Verification Engine
+export async function checkSePayAutoVerify(tokenOverride) {
+  const config = getShopConfig();
+  const token = tokenOverride || config.sepayApiToken;
+  if (!token) return { success: false, reason: 'Chưa nhập SePay API Key' };
+
+  try {
+    const res = await fetch('https://my.sepay.vn/userapi/transactions/list?limit=20', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!res.ok) return { success: false, reason: `SePay HTTP ${res.status}` };
+    const data = await res.json();
+    const txs = data.transactions || data.data || [];
+
+    const orders = getOrders();
+    const pendingOrders = orders.filter(o => !o.payment?.isPaid && o.payment?.method !== 'cod' && o.status !== 'HUY');
+    let matchedCount = 0;
+
+    for (const tx of txs) {
+      const content = (tx.transaction_content || tx.content || tx.code || '').toUpperCase();
+      const amountIn = parseFloat(tx.amount_in || tx.transferAmount || 0);
+
+      for (const order of pendingOrders) {
+        if (content.includes(order.id) || content.includes(order.id.replace('AN', ''))) {
+          // Confirm payment automatically
+          confirmPaymentReceived(order.id);
+          matchedCount++;
+          console.log(`[SePay Auto-Match] Order ${order.id} verified with ${amountIn}đ!`);
+        }
+      }
+    }
+
+    return { success: true, matchedCount, totalChecked: txs.length };
+  } catch (e) {
+    console.error('SePay Check Error:', e);
+    return { success: false, reason: e.message };
+  }
 }
 
 export function searchOrders(query) {

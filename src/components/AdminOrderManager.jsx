@@ -10,7 +10,8 @@ import {
   getShopConfig,
   saveShopConfig,
   sendFreeNotificationToOwner,
-  playNewOrderBellSound
+  playNewOrderBellSound,
+  checkSePayAutoVerify
 } from '../utils/orderService';
 
 import {
@@ -689,9 +690,21 @@ export default function AdminOrderManager({ onClose }) {
                   type="text"
                   value={shopConfig.notifyTelegramChatId || ''}
                   onChange={(e) => setShopConfigState({ ...shopConfig, notifyTelegramChatId: e.target.value })}
-                  placeholder="Ví dụ: 987654321"
+                  placeholder="Ví dụ: 7946238337"
                   className="w-full px-3 py-2 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-white font-mono text-[11px]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-gray-300 font-bold mb-1">SePay API Key (Tự động xác minh MB Bank)</label>
+                <input
+                  type="text"
+                  value={shopConfig.sepayApiToken || ''}
+                  onChange={(e) => setShopConfigState({ ...shopConfig, sepayApiToken: e.target.value })}
+                  placeholder="Lấy tại my.sepay.vn/userapi/apikey"
+                  className="w-full px-3 py-2 rounded-xl bg-[#1f2721] border border-[#3d633b]/40 text-white font-mono text-[11px]"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Nút bấm xác nhận thủ công sẵn sàng hoạt động ngay cả khi chưa nhập SePay Key.</p>
               </div>
 
               <div className="pt-2 border-t border-[#3d633b]/30 flex justify-between gap-2">
